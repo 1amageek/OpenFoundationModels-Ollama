@@ -1,0 +1,42 @@
+{
+  "originHash" : "15e16efbde3a27391509cfe896efb865acefff08d98d4916d06f6952f7f32fd1",
+  "pins" : [
+    {
+      "identity" : "openfoundationmodels",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/1amageek/OpenFoundationModels.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "578961e9afc88f579eeab27b346e4cc19582c6ea"
+      }
+    },
+    {
+      "identity" : "swift-async-algorithms",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-async-algorithms.git",
+      "state" : {
+        "revision" : "042e1c4d9d19748c9c228f8d4ebc97bb1e339b0b",
+        "version" : "1.0.4"
+      }
+    },
+    {
+      "identity" : "swift-collections",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-collections.git",
+      "state" : {
+        "revision" : "8c0c0a8b49e080e54e5e328cc552821ff07cd341",
+        "version" : "1.2.1"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "0687f71944021d616d34d922343dcef086855920",
+        "version" : "600.0.1"
+      }
+    }
+  ],
+  "version" : 3
+}
