@@ -164,26 +164,24 @@ struct MockOllamaTests {
     @Test("GenerationOptions conversion")
     func testGenerationOptionsConversion() {
         let options = GenerationOptions(
-            maxTokens: 100,
             temperature: 0.8,
-            topP: 0.95
+            maximumResponseTokens: 100
         )
         
         let ollamaOptions = options.toOllamaOptions()
         #expect(ollamaOptions.numPredict == 100)
         #expect(ollamaOptions.temperature == 0.8)
-        #expect(ollamaOptions.topP == 0.95)
+        #expect(ollamaOptions.topP == nil)  // topP is in SamplingMode, not directly accessible
     }
     
     @Test("Prompt to message conversion")
     func testPromptConversion() {
-        let segment1 = Prompt.Segment(text: "Hello", id: "1")
-        let segment2 = Prompt.Segment(text: "world", id: "2")
-        let prompt = Prompt(segments: [segment1, segment2])
+        // Prompt now takes a simple string, not segments
+        let prompt = Prompt("Hello world")
         
         let messages = [Message].from(prompt: prompt)
         #expect(messages.count == 1)
         #expect(messages[0].role == .user)
-        #expect(messages[0].content == "Hello\nworld")
+        #expect(messages[0].content == "Hello world")
     }
 }

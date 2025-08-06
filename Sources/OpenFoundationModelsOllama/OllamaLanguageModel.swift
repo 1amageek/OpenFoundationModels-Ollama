@@ -93,14 +93,14 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     
     /// Generate with Prompt object support
     public func generate(prompt: Prompt, options: GenerationOptions?) async throws -> String {
-        // Convert Prompt to string (combine segments)
-        let promptText = prompt.segments.map { $0.text }.joined(separator: "\n")
+        // Convert Prompt to string using description property
+        let promptText = prompt.description
         return try await generate(prompt: promptText, options: options)
     }
     
     /// Stream with Prompt object support
     public func stream(prompt: Prompt, options: GenerationOptions?) -> AsyncStream<String> {
-        let promptText = prompt.segments.map { $0.text }.joined(separator: "\n")
+        let promptText = prompt.description
         return stream(prompt: promptText, options: options)
     }
     

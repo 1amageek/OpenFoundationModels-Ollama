@@ -62,10 +62,14 @@ internal struct DefaultRequestBuilder: RequestBuilder {
 // MARK: - GenerationOptions Conversion
 internal extension GenerationOptions {
     func toOllamaOptions() -> OllamaOptions {
+        // Note: topP (top_p) is embedded in GenerationOptions.SamplingMode
+        // but the mode structure is opaque, so we can't extract it directly.
+        // Ollama will use its default topP value.
+        
         return OllamaOptions(
-            numPredict: maxTokens,
+            numPredict: maximumResponseTokens,
             temperature: temperature,
-            topP: topP
+            topP: nil  // SamplingMode probabilityThreshold cannot be extracted
         )
     }
 }
@@ -79,7 +83,7 @@ internal extension Array where Element == Message {
     
     /// Convert from Prompt object to messages
     static func from(prompt: Prompt) -> [Message] {
-        let combinedText = prompt.segments.map { $0.text }.joined(separator: "\n")
+        let combinedText = prompt.description
         return [Message(role: .user, content: combinedText)]
     }
 }
