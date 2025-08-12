@@ -11,7 +11,7 @@ struct OllamaLanguageModelTests {
     @Test("Configuration initialization with defaults")
     func testDefaultConfiguration() {
         let config = OllamaConfiguration()
-        #expect(config.baseURL.absoluteString == "http://localhost:11434")
+        #expect(config.baseURL.absoluteString == "http://127.0.0.1:11434")
         #expect(config.timeout == 120.0)
         #expect(config.keepAlive == nil)
     }
@@ -54,7 +54,7 @@ struct OllamaLanguageModelTests {
         let model1 = OllamaLanguageModel.create(model: "gpt-oss:20b")
         #expect(model1.isAvailable == true)
         
-        let model2 = OllamaLanguageModel.create(model: "gpt-oss:20b", host: "localhost", port: 11434)
+        let model2 = OllamaLanguageModel.create(model: "gpt-oss:20b", host: "127.0.0.1", port: 11434)
         #expect(model2.isAvailable == true)
     }
     
@@ -140,8 +140,8 @@ struct OllamaLanguageModelTests {
     
     @Test("Ollama error types have correct descriptions")
     func testOllamaErrorDescriptions() {
-        let connectionError = OllamaError.connectionFailed("Cannot connect to localhost:11434")
-        #expect(connectionError.localizedDescription == "Cannot connect to localhost:11434")
+        let connectionError = OllamaError.connectionFailed("Cannot connect to 127.0.0.1:11434")
+        #expect(connectionError.localizedDescription == "Cannot connect to 127.0.0.1:11434")
         #expect(connectionError.recoverySuggestion == "Make sure Ollama is running with 'ollama serve'")
         
         let modelError = OllamaError.modelNotFound

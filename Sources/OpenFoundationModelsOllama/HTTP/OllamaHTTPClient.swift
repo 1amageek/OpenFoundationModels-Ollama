@@ -51,11 +51,17 @@ public actor OllamaHTTPClient {
         let url = configuration.baseURL.appendingPathComponent(endpoint)
         
         var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        if !(request is EmptyRequest) {
-            urlRequest.httpBody = try encoder.encode(request)
+        // Use GET for /api/tags endpoint, POST for others
+        if endpoint == "/api/tags" && request is EmptyRequest {
+            urlRequest.httpMethod = "GET"
+        } else {
+            urlRequest.httpMethod = "POST"
+            urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            if !(request is EmptyRequest) {
+                urlRequest.httpBody = try encoder.encode(request)
+            }
         }
         
         do {

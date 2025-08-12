@@ -104,6 +104,73 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
         return stream(prompt: promptText, options: options)
     }
     
+    // MARK: - Chat API with Tool Support
+    
+    /// Generate chat response with optional tool support
+    /// - Parameters:
+    ///   - messages: Array of chat messages
+    ///   - options: Generation options
+    ///   - tools: Optional array of tools for function calling
+    /// - Returns: Chat response with potential tool calls
+    public func chat(
+        messages: [Message],
+        options: GenerationOptions? = nil,
+        tools: [Tool]? = nil
+    ) async throws -> ChatResponse {
+        let request = ChatRequest(
+            model: modelName,
+            messages: messages,
+            stream: false,
+            options: options?.toOllamaOptions(),
+            keepAlive: configuration.keepAlive,
+            tools: tools
+        )
+        
+        return try await httpClient.send(request, to: "/api/chat")
+    }
+    
+    /// Stream chat response with optional tool support
+    /// - Parameters:
+    ///   - messages: Array of chat messages
+    ///   - options: Generation options
+    ///   - tools: Optional array of tools for function calling
+    /// - Returns: Async stream of chat responses
+    public func streamChat(
+        messages: [Message],
+        options: GenerationOptions? = nil,
+        tools: [Tool]? = nil
+    ) -> AsyncThrowingStream<ChatResponse, Error> {
+        AsyncThrowingStream<ChatResponse, Error> { continuation in
+            Task {
+                do {
+                    let request = ChatRequest(
+                        model: modelName,
+                        messages: messages,
+                        stream: true,
+                        options: options?.toOllamaOptions(),
+                        keepAlive: configuration.keepAlive,
+                        tools: tools
+                    )
+                    
+                    let streamResponse: AsyncThrowingStream<ChatResponse, Error> = await httpClient.stream(request, to: "/api/chat")
+                    
+                    for try await chunk in streamResponse {
+                        continuation.yield(chunk)
+                        
+                        if chunk.done {
+                            continuation.finish()
+                            return
+                        }
+                    }
+                    
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+    
     // MARK: - Model Information
     
     /// Check if model is available locally

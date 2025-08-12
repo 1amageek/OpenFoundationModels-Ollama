@@ -27,11 +27,11 @@ extension OllamaLanguageModel {
     /// Initialize with model and custom host/port
     /// - Parameters:
     ///   - model: Model name
-    ///   - host: Ollama host (default: localhost)
+    ///   - host: Ollama host (default: 127.0.0.1)
     ///   - port: Ollama port (default: 11434)
     public static func create(
         model: String,
-        host: String = "localhost",
+        host: String = "127.0.0.1",
         port: Int = 11434
     ) -> OllamaLanguageModel {
         let config = OllamaConfiguration.create(host: host, port: port)
@@ -64,6 +64,10 @@ public struct OllamaModels {
     // Vision models
     public static let llava = "llava"
     public static let bakllava = "bakllava"
+    
+    // GPT-OSS models
+    public static let gptOss20b = "gpt-oss:20b"
+    public static let gptOss120b = "gpt-oss:120b"
     
     /// Check if a model supports tool calling
     public static func supportsTools(_ model: String) -> Bool {

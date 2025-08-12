@@ -2,7 +2,7 @@ import Foundation
 
 /// Configuration for Ollama API
 public struct OllamaConfiguration: Sendable {
-    /// Base URL for Ollama API (default: http://localhost:11434)
+    /// Base URL for Ollama API (default: http://127.0.0.1:11434)
     public let baseURL: URL
     
     /// Request timeout in seconds
@@ -17,7 +17,7 @@ public struct OllamaConfiguration: Sendable {
     ///   - timeout: Request timeout in seconds
     ///   - keepAlive: Keep alive duration (e.g., "5m", "1h", "-1" for indefinite)
     public init(
-        baseURL: URL = URL(string: "http://localhost:11434")!,
+        baseURL: URL = URL(string: "http://127.0.0.1:11434")!,
         timeout: TimeInterval = 120.0,
         keepAlive: String? = nil
     ) {
@@ -30,7 +30,7 @@ public struct OllamaConfiguration: Sendable {
 // MARK: - Convenience Initializers
 extension OllamaConfiguration {
     /// Initialize with custom host and port
-    public static func create(host: String = "localhost", port: Int = 11434, timeout: TimeInterval = 120.0) -> OllamaConfiguration {
+    public static func create(host: String = "127.0.0.1", port: Int = 11434, timeout: TimeInterval = 120.0) -> OllamaConfiguration {
         return OllamaConfiguration(
             baseURL: URL(string: "http://\(host):\(port)")!,
             timeout: timeout

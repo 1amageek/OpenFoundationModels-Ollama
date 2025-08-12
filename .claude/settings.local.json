@@ -6,7 +6,16 @@
       "Bash(mkdir:*)",
       "Bash(swift build)",
       "Bash(swift test)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "mcp__deepwiki__read_wiki_structure",
+      "mcp__deepwiki__read_wiki_contents",
+      "mcp__deepwiki__ask_question",
+      "Bash(ollama list:*)",
+      "Bash(curl:*)",
+      "Bash(swift test:*)",
+      "Bash(find:*)",
+      "Bash(swift package describe:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }
