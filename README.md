@@ -6,12 +6,21 @@ Ollama provider implementation for Apple's OpenFoundationModels framework, enabl
 
 OpenFoundationModels-Ollama provides a complete implementation of the `LanguageModel` protocol from Apple's OpenFoundationModels framework, allowing you to use Ollama's locally-hosted models through a unified API interface.
 
+### 🆕 Transcript-Based Architecture (Updated 2025-08-13)
+
+The library now fully supports the new Transcript-based LanguageModel protocol from OpenFoundationModels, providing:
+- Complete conversation history management via Transcript
+- Automatic tool extraction from Instructions
+- Seamless context handling across multiple turns
+- Full support for all Transcript.Entry types
+
 ## Features
 
-- ✅ Full `LanguageModel` protocol compliance
+- ✅ Full `LanguageModel` protocol compliance (Transcript-based)
+- ✅ Automatic tool extraction and conversion
+- ✅ Complete conversation history support
 - ✅ Streaming and non-streaming text generation
 - ✅ Tool calling support (model-dependent)
-- ✅ Thinking/reasoning support (model-dependent)
 - ✅ Line-delimited JSON streaming
 - ✅ Swift 6 concurrency compliance
 - ✅ Comprehensive error handling
@@ -22,6 +31,7 @@ OpenFoundationModels-Ollama provides a complete implementation of the `LanguageM
 - Swift 6.0+
 - macOS 15.0+ / iOS 18.0+ / tvOS 18.0+ / watchOS 11.0+ / visionOS 2.0+
 - Ollama installed and running locally
+- OpenFoundationModels (latest version with Transcript support)
 
 ## Installation
 
@@ -31,7 +41,7 @@ Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/1amageek/OpenFoundationModels-Ollama.git", from: "1.0.0")
+    .package(url: "https://github.com/1amageek/OpenFoundationModels-Ollama.git", from: "2.0.0")
 ]
 ```
 
@@ -48,47 +58,136 @@ targets: [
 
 ## Quick Start
 
-### Basic Usage
+### Basic Usage with Transcript
 
 ```swift
 import OpenFoundationModelsOllama
+import OpenFoundationModels
 
 // Create a language model instance
 let ollama = OllamaLanguageModel(modelName: "llama3.2")
 
-// Generate text
+// Create a transcript with conversation history
+var transcript = Transcript()
+
+// Add instructions (system message)
+transcript.append(.instructions(Transcript.Instructions(
+    id: "inst-1",
+    segments: [.text(Transcript.TextSegment(
+        id: "seg-1",
+        content: "You are a helpful assistant"
+    ))],
+    toolDefinitions: []
+)))
+
+// Add user prompt
+transcript.append(.prompt(Transcript.Prompt(
+    id: "prompt-1",
+    segments: [.text(Transcript.TextSegment(
+        id: "seg-2",
+        content: "Hello, how are you?"
+    ))],
+    options: GenerationOptions(temperature: 0.7),
+    responseFormat: nil
+)))
+
+// Generate response
 let response = try await ollama.generate(
-    prompt: "Hello, how are you?",
-    options: GenerationOptions(temperature: 0.7)
+    transcript: transcript,
+    options: nil  // Uses options from transcript if available
 )
 
 print(response)
 ```
 
-### Streaming
+### Streaming with Transcript
 
 ```swift
-// Stream responses
-let ollama = OllamaLanguageModel(modelName: "mistral")
+// Stream responses with conversation history
+let stream = ollama.stream(transcript: transcript, options: nil)
 
-for await chunk in ollama.stream(prompt: "Tell me a story") {
+for await chunk in stream {
     print(chunk, terminator: "")
 }
+```
+
+### Tool Calling with Transcript
+
+```swift
+// Define a tool in the transcript
+let weatherTool = Transcript.ToolDefinition(
+    name: "get_weather",
+    description: "Get current weather for a location",
+    parameters: weatherSchema  // GenerationSchema
+)
+
+// Add instructions with tools
+transcript.append(.instructions(Transcript.Instructions(
+    id: "inst-1",
+    segments: [.text(Transcript.TextSegment(
+        id: "seg-1",
+        content: "You can check weather when asked"
+    ))],
+    toolDefinitions: [weatherTool]
+)))
+
+// Add user query
+transcript.append(.prompt(Transcript.Prompt(
+    id: "prompt-1",
+    segments: [.text(Transcript.TextSegment(
+        id: "seg-2",
+        content: "What's the weather in Tokyo?"
+    ))],
+    options: GenerationOptions(temperature: 0.1),
+    responseFormat: nil
+)))
+
+// Generate - tools are automatically extracted and sent to Ollama
+let response = try await ollama.generate(transcript: transcript, options: nil)
+```
+
+### Conversation History
+
+```swift
+// Build a multi-turn conversation
+var transcript = Transcript()
+
+// First exchange
+transcript.append(.prompt(Transcript.Prompt(
+    id: "p1",
+    segments: [.text(Transcript.TextSegment(id: "s1", content: "What is 2+2?"))],
+    options: GenerationOptions(),
+    responseFormat: nil
+)))
+
+transcript.append(.response(Transcript.Response(
+    id: "r1",
+    assetIDs: [],
+    segments: [.text(Transcript.TextSegment(id: "s2", content: "2+2 equals 4."))]
+)))
+
+// Follow-up question - maintains context
+transcript.append(.prompt(Transcript.Prompt(
+    id: "p2",
+    segments: [.text(Transcript.TextSegment(id: "s3", content: "What about 3+3?"))],
+    options: GenerationOptions(),
+    responseFormat: nil
+)))
+
+// Generate with full context
+let response = try await ollama.generate(transcript: transcript, options: nil)
 ```
 
 ### Custom Configuration
 
 ```swift
 // Configure with custom host and port
-let config = OllamaConfiguration.create(host: "192.168.1.100", port: 8080)
-let ollama = OllamaLanguageModel(configuration: config, modelName: "llama3.2")
-
-// Or use convenience factory method
-let ollama = OllamaLanguageModel.create(
-    model: "llama3.2",
-    host: "myserver",
-    port: 11434
+let config = OllamaConfiguration(
+    host: "192.168.1.100",
+    port: 8080,
+    keepAlive: "10m"
 )
+let ollama = OllamaLanguageModel(configuration: config, modelName: "llama3.2")
 ```
 
 ### Check Model Availability
@@ -107,73 +206,42 @@ if try await ollama.isModelAvailable() {
 
 The library supports all Ollama models. Some popular ones include:
 
-```swift
-// Base models
-OllamaModels.llama3_2    // "llama3.2"
-OllamaModels.llama3_1    // "llama3.1"
-OllamaModels.mistral     // "mistral"
-OllamaModels.mixtral     // "mixtral"
-OllamaModels.phi3        // "phi3"
+- **Language Models**: llama3.2, llama3.1, mistral, mixtral, phi3
+- **Code Models**: codellama, deepseek-coder
+- **Specialized Models**: deepseek-r1 (supports thinking/reasoning)
+- **Vision Models**: llava
 
-// Code models
-OllamaModels.codellama   // "codellama"
-OllamaModels.deepseekCoder // "deepseek-coder"
+## Advanced Features
 
-// Specialized models
-OllamaModels.deepseekR1  // "deepseek-r1" (supports thinking)
-
-// Vision models
-OllamaModels.llava       // "llava"
-```
-
-### Model Capabilities
-
-Check if a model supports specific features:
+### Response Format
 
 ```swift
-// Check tool calling support
-if OllamaModels.supportsTools("llama3.2") {
-    // Model supports tool calling
-}
-
-// Check thinking/reasoning support
-if OllamaModels.supportsThinking("deepseek-r1") {
-    // Model supports thinking feature
-}
-```
-
-## Advanced Usage
-
-### Using with Prompts
-
-```swift
-import OpenFoundationModels
-
-// Create a structured prompt
-let prompt = Prompt(segments: [
-    Prompt.Segment(text: "You are a helpful assistant", id: "system"),
-    Prompt.Segment(text: "What is the capital of France?", id: "user")
-])
-
-let response = try await ollama.generate(
-    prompt: prompt,
-    options: GenerationOptions(maxTokens: 100)
-)
+// Request JSON formatted output
+transcript.append(.prompt(Transcript.Prompt(
+    id: "prompt-1",
+    segments: [.text(Transcript.TextSegment(
+        id: "seg-1",
+        content: "List 3 colors in JSON format"
+    ))],
+    options: GenerationOptions(),
+    responseFormat: Transcript.ResponseFormat(
+        name: "json",
+        schema: nil  // Schema would go here for structured output
+    )
+)))
 ```
 
 ### Generation Options
 
 ```swift
 let options = GenerationOptions(
-    maxTokens: 500,        // Maximum tokens to generate
-    temperature: 0.8,      // Randomness (0.0 - 1.0)
-    topP: 0.95,           // Nucleus sampling
-    topK: 40,             // Top-k sampling
-    seed: 42              // For reproducible outputs
+    maximumResponseTokens: 500,  // Max tokens to generate
+    temperature: 0.8,            // Randomness (0.0 - 1.0)
+    samplingMode: .topK(40)      // Sampling strategy
 )
 
 let response = try await ollama.generate(
-    prompt: "Write a haiku",
+    transcript: transcript,
     options: options
 )
 ```
@@ -182,19 +250,10 @@ let response = try await ollama.generate(
 
 ```swift
 do {
-    let response = try await ollama.generate(prompt: "Hello")
-} catch let error as OllamaError {
-    switch error {
-    case .connectionFailed(let message):
-        print("Connection failed: \(message)")
-        print("Make sure Ollama is running with 'ollama serve'")
-    case .modelNotFound:
-        print("Model not found. Run: ollama pull <model-name>")
-    case .timeout:
-        print("Request timed out")
-    default:
-        print("Error: \(error.localizedDescription)")
-    }
+    let response = try await ollama.generate(transcript: transcript, options: nil)
+} catch {
+    print("Error: \(error.localizedDescription)")
+    // Handle specific errors as needed
 }
 ```
 
@@ -212,6 +271,15 @@ do {
    ollama pull llama3.2
    ```
 
+## Architecture
+
+The library uses a Transcript-centric design:
+
+- **TranscriptConverter**: Converts OpenFoundationModels Transcript to Ollama API format
+- **OllamaLanguageModel**: Implements the LanguageModel protocol
+- **OllamaHTTPClient**: Handles communication with Ollama API
+- **Automatic Tool Extraction**: Tools are extracted from Transcript.Instructions
+
 ## API Documentation
 
 For detailed API documentation and implementation details, see [CLAUDE.md](CLAUDE.md).
@@ -222,6 +290,9 @@ Run the test suite:
 
 ```bash
 swift test
+
+# Run specific tests
+swift test --filter "TranscriptTests"
 ```
 
 ## Contributing
@@ -234,5 +305,5 @@ This project is available under the MIT license. See the LICENSE file for more i
 
 ## Acknowledgments
 
-- Built on top of Apple's [OpenFoundationModels](https://github.com/apple/swift-openai) framework
+- Built on top of Apple's [OpenFoundationModels](https://github.com/1amageek/OpenFoundationModels) framework
 - Powered by [Ollama](https://ollama.ai)

@@ -3,12 +3,7 @@ import Foundation
 @testable import OpenFoundationModelsOllama
 @testable import OpenFoundationModels
 
-// MARK: - Test Skip Error
-
-struct TestSkip: Error, CustomStringConvertible {
-    let reason: String
-    var description: String { reason }
-}
+// TestSkip is defined in OllamaLanguageModelTests.swift
 
 @Suite("Ollama Tool Calling Tests")
 struct OllamaToolTests {

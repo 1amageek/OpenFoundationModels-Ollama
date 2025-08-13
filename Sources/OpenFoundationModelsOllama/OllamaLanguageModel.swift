@@ -38,40 +38,75 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     
     // MARK: - LanguageModel Protocol Implementation
     
-    public func generate(prompt: String, options: GenerationOptions?, tools: [any OpenFoundationModels.Tool]?) async throws -> String {
-        // For now, ignore tools parameter as Ollama's /api/generate doesn't support tools
-        // Tools are only supported in /api/chat endpoint
-        let request = GenerateRequest(
+    public func generate(transcript: Transcript, options: GenerationOptions?) async throws -> String {
+        // Convert Transcript to Ollama format
+        let messages = TranscriptConverter.buildMessages(from: transcript)
+        let tools = TranscriptConverter.extractTools(from: transcript)
+        let responseFormat = TranscriptConverter.extractResponseFormat(from: transcript)
+        
+        // Use the options from the transcript if not provided
+        let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
+        
+        // Always use /api/chat for consistency and tool support
+        let request = ChatRequest(
             model: modelName,
-            prompt: prompt,
+            messages: messages,
             stream: false,
-            options: options?.toOllamaOptions(),
-            keepAlive: configuration.keepAlive
+            options: finalOptions?.toOllamaOptions(),
+            format: responseFormat,
+            keepAlive: configuration.keepAlive,
+            tools: tools
         )
         
-        let response: GenerateResponse = try await httpClient.send(request, to: "/api/generate")
-        return response.response
+        let response: ChatResponse = try await httpClient.send(request, to: "/api/chat")
+        
+        
+        // Handle tool calls if present
+        if let toolCalls = response.message?.toolCalls,
+           !toolCalls.isEmpty {
+            // For now, return a formatted string representation of tool calls
+            // In a full implementation, this would trigger tool execution
+            return formatToolCalls(toolCalls)
+        }
+        
+        return response.message?.content ?? ""
     }
     
-    public func stream(prompt: String, options: GenerationOptions?, tools: [any OpenFoundationModels.Tool]?) -> AsyncStream<String> {
-        // For now, ignore tools parameter as Ollama's /api/generate doesn't support tools
-        // Tools are only supported in /api/chat endpoint
+    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<String> {
         AsyncStream<String> { continuation in
             Task {
                 do {
-                    let request = GenerateRequest(
+                    // Convert Transcript to Ollama format
+                    let messages = TranscriptConverter.buildMessages(from: transcript)
+                    let tools = TranscriptConverter.extractTools(from: transcript)
+                    let responseFormat = TranscriptConverter.extractResponseFormat(from: transcript)
+                    
+                    // Use the options from the transcript if not provided
+                    let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
+                    
+                    let request = ChatRequest(
                         model: modelName,
-                        prompt: prompt,
+                        messages: messages,
                         stream: true,
-                        options: options?.toOllamaOptions(),
-                        keepAlive: configuration.keepAlive
+                        options: finalOptions?.toOllamaOptions(),
+                        format: responseFormat,
+                        keepAlive: configuration.keepAlive,
+                        tools: tools
                     )
                     
-                    let streamResponse: AsyncThrowingStream<GenerateResponse, Error> = await httpClient.stream(request, to: "/api/generate")
+                    let streamResponse: AsyncThrowingStream<ChatResponse, Error> = await httpClient.stream(request, to: "/api/chat")
                     
                     for try await chunk in streamResponse {
-                        // Yield the response text
-                        continuation.yield(chunk.response)
+                        // Yield the response content
+                        if let content = chunk.message?.content, !content.isEmpty {
+                            continuation.yield(content)
+                        }
+                        
+                        // Handle tool calls in streaming
+                        if let toolCalls = chunk.message?.toolCalls,
+                           !toolCalls.isEmpty {
+                            continuation.yield(formatToolCalls(toolCalls))
+                        }
                         
                         // Check if streaming is complete
                         if chunk.done {
@@ -93,19 +128,15 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
         return true
     }
     
-    // MARK: - Enhanced API with Prompt Support
+    // MARK: - Private Helper Methods
     
-    /// Generate with Prompt object support
-    public func generate(prompt: Prompt, options: GenerationOptions?, tools: [any OpenFoundationModels.Tool]?) async throws -> String {
-        // Convert Prompt to string using description property
-        let promptText = prompt.description
-        return try await generate(prompt: promptText, options: options, tools: tools)
-    }
-    
-    /// Stream with Prompt object support
-    public func stream(prompt: Prompt, options: GenerationOptions?, tools: [any OpenFoundationModels.Tool]?) -> AsyncStream<String> {
-        let promptText = prompt.description
-        return stream(prompt: promptText, options: options, tools: tools)
+    /// Format tool calls as a string representation
+    private func formatToolCalls(_ toolCalls: [ToolCall]) -> String {
+        var result = "Tool calls:\n"
+        for toolCall in toolCalls {
+            result += "- \(toolCall.function.name)(\(toolCall.function.arguments.dictionary))\n"
+        }
+        return result
     }
     
     // MARK: - Chat API with Tool Support

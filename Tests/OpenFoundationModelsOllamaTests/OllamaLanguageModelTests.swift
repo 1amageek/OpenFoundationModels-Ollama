@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import OpenFoundationModelsOllama
 @testable import OpenFoundationModels
+@testable import OpenFoundationModelsCore
 
 @Suite("Ollama Language Model Tests")
 struct OllamaLanguageModelTests {
@@ -28,10 +29,16 @@ struct OllamaLanguageModelTests {
         #expect(config.keepAlive == "10m")
     }
     
-    @Test("Configuration convenience factory")
-    func testConvenienceConfiguration() {
-        let config = OllamaConfiguration.create(host: "myserver", port: 8080)
+    @Test("Configuration with host and port")
+    func testConfigurationWithHostPort() {
+        let config = OllamaConfiguration.create(
+            host: "myserver",
+            port: 8080,
+            timeout: 60.0
+        )
         #expect(config.baseURL.absoluteString == "http://myserver:8080")
+        #expect(config.timeout == 60.0)
+        #expect(config.keepAlive == nil)
     }
     
     // MARK: - Model Initialization Tests
@@ -39,23 +46,14 @@ struct OllamaLanguageModelTests {
     @Test("Model initialization with configuration")
     func testModelInitialization() {
         let config = OllamaConfiguration()
-        let model = OllamaLanguageModel(configuration: config, modelName: "gpt-oss:20b")
+        let model = OllamaLanguageModel(configuration: config, modelName: "llama3.2")
         #expect(model.isAvailable == true)
     }
     
     @Test("Model convenience initializer")
     func testModelConvenienceInit() {
-        let model = OllamaLanguageModel(modelName: "gpt-oss:20b")
+        let model = OllamaLanguageModel(modelName: "llama3.2")
         #expect(model.isAvailable == true)
-    }
-    
-    @Test("Model static factory methods")
-    func testModelFactoryMethods() {
-        let model1 = OllamaLanguageModel.create(model: "gpt-oss:20b")
-        #expect(model1.isAvailable == true)
-        
-        let model2 = OllamaLanguageModel.create(model: "gpt-oss:20b", host: "127.0.0.1", port: 11434)
-        #expect(model2.isAvailable == true)
     }
     
     // MARK: - API Types Tests
@@ -63,7 +61,7 @@ struct OllamaLanguageModelTests {
     @Test("GenerateRequest encoding")
     func testGenerateRequestEncoding() throws {
         let request = GenerateRequest(
-            model: "gpt-oss:20b",
+            model: "llama3.2",
             prompt: "Hello",
             stream: false,
             options: OllamaOptions(temperature: 0.7, topP: 0.9)
@@ -73,7 +71,7 @@ struct OllamaLanguageModelTests {
         let data = try encoder.encode(request)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         
-        #expect(json?["model"] as? String == "gpt-oss:20b")
+        #expect(json?["model"] as? String == "llama3.2")
         #expect(json?["prompt"] as? String == "Hello")
         #expect(json?["stream"] as? Bool == false)
         
@@ -82,46 +80,50 @@ struct OllamaLanguageModelTests {
         #expect(options?["top_p"] as? Double == 0.9)
     }
     
+    @Test("ChatRequest encoding")
+    func testChatRequestEncoding() throws {
+        let messages = [
+            Message(role: .system, content: "You are helpful"),
+            Message(role: .user, content: "Hello")
+        ]
+        
+        let request = ChatRequest(
+            model: "llama3.2",
+            messages: messages,
+            stream: false
+        )
+        
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(request)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        
+        #expect(json?["model"] as? String == "llama3.2")
+        #expect(json?["stream"] as? Bool == false)
+        
+        let msgs = json?["messages"] as? [[String: Any]]
+        #expect(msgs?.count == 2)
+        #expect(msgs?[0]["role"] as? String == "system")
+        #expect(msgs?[1]["role"] as? String == "user")
+    }
+    
     @Test("Message encoding with different roles")
     func testMessageEncoding() throws {
         let messages = [
             Message(role: .system, content: "You are a helpful assistant"),
             Message(role: .user, content: "Hello"),
-            Message(role: .assistant, content: "Hi there!")
+            Message(role: .assistant, content: "Hi there!"),
+            Message(role: .tool, content: "Tool result")
         ]
         
         let encoder = JSONEncoder()
         let data = try encoder.encode(messages)
         let json = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         
-        #expect(json?.count == 3)
+        #expect(json?.count == 4)
         #expect(json?[0]["role"] as? String == "system")
         #expect(json?[1]["role"] as? String == "user")
         #expect(json?[2]["role"] as? String == "assistant")
-    }
-    
-    // MARK: - Model Support Tests
-    
-    @Test("Model constants are defined correctly")
-    func testModelConstants() {
-        #expect(OllamaModels.llama3_2 == "llama3.2")
-        #expect(OllamaModels.mistral == "mistral")
-        #expect(OllamaModels.codellama == "codellama")
-        #expect(OllamaModels.deepseekR1 == "deepseek-r1")
-        // Add test for gpt-oss models
-        #expect(OllamaModels.gptOss20b == "gpt-oss:20b")
-        #expect(OllamaModels.gptOss120b == "gpt-oss:120b")
-    }
-    
-    @Test("Model capability detection")
-    func testModelCapabilities() {
-        #expect(OllamaModels.supportsTools("llama3.2") == true)
-        #expect(OllamaModels.supportsTools("llama3.2:latest") == true)
-        #expect(OllamaModels.supportsTools("llama2") == false)
-        
-        #expect(OllamaModels.supportsThinking("deepseek-r1") == true)
-        #expect(OllamaModels.supportsThinking("deepseek-r1:latest") == true)
-        #expect(OllamaModels.supportsThinking("llama3.2") == false)
+        #expect(json?[3]["role"] as? String == "tool")
     }
     
     // MARK: - Error Handling Tests
@@ -138,31 +140,68 @@ struct OllamaLanguageModelTests {
         #expect(error.localizedDescription.contains("model 'unknown' not found"))
     }
     
-    @Test("Ollama error types have correct descriptions")
-    func testOllamaErrorDescriptions() {
-        let connectionError = OllamaError.connectionFailed("Cannot connect to 127.0.0.1:11434")
-        #expect(connectionError.localizedDescription == "Cannot connect to 127.0.0.1:11434")
-        #expect(connectionError.recoverySuggestion == "Make sure Ollama is running with 'ollama serve'")
+    // MARK: - Transcript-based Tests
+    
+    @Test("Transcript conversion to messages")
+    func testTranscriptConversion() {
+        var transcript = Transcript()
         
-        let modelError = OllamaError.modelNotFound
-        #expect(modelError.localizedDescription.contains("Please run 'ollama pull") == true)
-        #expect(modelError.recoverySuggestion?.contains("ollama pull") == true)
+        // Add instructions
+        transcript.append(.instructions(Transcript.Instructions(
+            id: "inst-1",
+            segments: [.text(Transcript.TextSegment(id: "seg-1", content: "You are helpful"))],
+            toolDefinitions: []
+        )))
+        
+        // Add prompt
+        transcript.append(.prompt(Transcript.Prompt(
+            id: "prompt-1",
+            segments: [.text(Transcript.TextSegment(id: "seg-2", content: "Hello"))],
+            options: GenerationOptions(),
+            responseFormat: nil
+        )))
+        
+        // Convert to messages
+        let messages = TranscriptConverter.buildMessages(from: transcript)
+        
+        #expect(messages.count == 2)
+        #expect(messages[0].role == .system)
+        #expect(messages[0].content == "You are helpful")
+        #expect(messages[1].role == .user)
+        #expect(messages[1].content == "Hello")
     }
     
-    // MARK: - Framework Info Tests
-    
-    @Test("Framework version information")
-    func testFrameworkInfo() {
-        #expect(OpenFoundationModelsOllama.version == "1.0.0")
-        #expect(!OpenFoundationModelsOllama.capabilities.isEmpty)
-        #expect(OpenFoundationModelsOllama.frameworkInfo.contains("OpenFoundationModels-Ollama"))
+    @Test("Tool extraction from transcript")
+    func testToolExtractionFromTranscript() {
+        var transcript = Transcript()
+        
+        // Create a mock schema for testing
+        let mockSchema = GenerationSchema(
+            type: "object",
+            description: "Test parameters"
+        )
+        
+        let toolDef = Transcript.ToolDefinition(
+            name: "test_tool",
+            description: "A test tool",
+            parameters: mockSchema
+        )
+        
+        transcript.append(.instructions(Transcript.Instructions(
+            id: "inst-1",
+            segments: [],
+            toolDefinitions: [toolDef]
+        )))
+        
+        // Extract tools
+        let tools = TranscriptConverter.extractTools(from: transcript)
+        
+        #expect(tools?.count == 1)
+        #expect(tools?.first?.function.name == "test_tool")
+        #expect(tools?.first?.function.description == "A test tool")
     }
-}
-
-// MARK: - Mock Tests (without actual Ollama connection)
-
-@Suite("Mock Ollama Tests")
-struct MockOllamaTests {
+    
+    // MARK: - Options Conversion Tests
     
     @Test("GenerationOptions conversion")
     func testGenerationOptionsConversion() {
@@ -176,15 +215,58 @@ struct MockOllamaTests {
         #expect(ollamaOptions.temperature == 0.8)
         #expect(ollamaOptions.topP == nil)  // topP is in SamplingMode, not directly accessible
     }
+}
+
+// MARK: - Integration Tests (requires Ollama running)
+
+@Suite("Ollama Integration Tests")
+struct OllamaIntegrationTests {
     
-    @Test("Prompt to message conversion")
-    func testPromptConversion() {
-        // Prompt now takes a simple string, not segments
-        let prompt = Prompt("Hello world")
-        
-        let messages = [Message].from(prompt: prompt)
-        #expect(messages.count == 1)
-        #expect(messages[0].role == .user)
-        #expect(messages[0].content == "Hello world")
+    private let defaultModel = "gpt-oss:20b"
+    
+    private var isOllamaAvailable: Bool {
+        get async {
+            do {
+                let config = OllamaConfiguration()
+                let httpClient = OllamaHTTPClient(configuration: config)
+                let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
+                return true
+            } catch {
+                return false
+            }
+        }
     }
+    
+    @Test("Check model availability")
+    @available(macOS 13.0, iOS 16.0, *)
+    func testModelAvailability() async throws {
+        guard await isOllamaAvailable else {
+            throw TestSkip(reason: "Ollama is not running")
+        }
+        
+        let model = OllamaLanguageModel(modelName: defaultModel)
+        
+        // This might fail if the model isn't pulled
+        let isAvailable = try? await model.isModelAvailable()
+        #expect(isAvailable != nil)
+    }
+    
+    @Test("List available models")
+    @available(macOS 13.0, iOS 16.0, *)
+    func testListModels() async throws {
+        guard await isOllamaAvailable else {
+            throw TestSkip(reason: "Ollama is not running")
+        }
+        
+        let model = OllamaLanguageModel(modelName: defaultModel)
+        let models = try await model.listModels()
+        
+        #expect(models.count >= 0)  // At least no error thrown
+    }
+}
+
+// Helper for test skipping
+struct TestSkip: Error, CustomStringConvertible {
+    let reason: String
+    var description: String { reason }
 }

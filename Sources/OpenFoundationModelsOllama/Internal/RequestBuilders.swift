@@ -74,17 +74,12 @@ internal extension GenerationOptions {
     }
 }
 
-// MARK: - Message Conversion
+// MARK: - Message Conversion (Deprecated - Use TranscriptConverter instead)
 internal extension Array where Element == Message {
     /// Convert from simple prompt to messages
+    @available(*, deprecated, message: "Use TranscriptConverter.buildMessages instead")
     static func from(prompt: String) -> [Message] {
         return [Message(role: .user, content: prompt)]
-    }
-    
-    /// Convert from Prompt object to messages
-    static func from(prompt: Prompt) -> [Message] {
-        let combinedText = prompt.description
-        return [Message(role: .user, content: combinedText)]
     }
 }
 

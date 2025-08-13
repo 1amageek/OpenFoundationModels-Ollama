@@ -137,19 +137,22 @@ public struct Message: Codable, Sendable {
     public let role: Role
     public let content: String
     public let toolCalls: [ToolCall]?
+    public let thinking: String?  // Add thinking field for models that support it
     
     public init(
         role: Role,
         content: String,
-        toolCalls: [ToolCall]? = nil
+        toolCalls: [ToolCall]? = nil,
+        thinking: String? = nil
     ) {
         self.role = role
         self.content = content
         self.toolCalls = toolCalls
+        self.thinking = thinking
     }
     
     enum CodingKeys: String, CodingKey {
-        case role, content
+        case role, content, thinking
         case toolCalls = "tool_calls"
     }
 }

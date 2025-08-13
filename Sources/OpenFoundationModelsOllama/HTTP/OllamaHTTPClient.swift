@@ -78,6 +78,7 @@ public actor OllamaHTTPClient {
                 throw OllamaHTTPError.statusError(httpResponse.statusCode, data)
             }
             
+            
             return try decoder.decode(Response.self, from: data)
         } catch let error as URLError {
             if error.code == .notConnectedToInternet || error.code == .cannotConnectToHost {
