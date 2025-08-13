@@ -38,7 +38,9 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     
     // MARK: - LanguageModel Protocol Implementation
     
-    public func generate(prompt: String, options: GenerationOptions?) async throws -> String {
+    public func generate(prompt: String, options: GenerationOptions?, tools: [any OpenFoundationModels.Tool]?) async throws -> String {
+        // For now, ignore tools parameter as Ollama's /api/generate doesn't support tools
+        // Tools are only supported in /api/chat endpoint
         let request = GenerateRequest(
             model: modelName,
             prompt: prompt,
@@ -51,7 +53,9 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
         return response.response
     }
     
-    public func stream(prompt: String, options: GenerationOptions?) -> AsyncStream<String> {
+    public func stream(prompt: String, options: GenerationOptions?, tools: [any OpenFoundationModels.Tool]?) -> AsyncStream<String> {
+        // For now, ignore tools parameter as Ollama's /api/generate doesn't support tools
+        // Tools are only supported in /api/chat endpoint
         AsyncStream<String> { continuation in
             Task {
                 do {
@@ -92,16 +96,16 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     // MARK: - Enhanced API with Prompt Support
     
     /// Generate with Prompt object support
-    public func generate(prompt: Prompt, options: GenerationOptions?) async throws -> String {
+    public func generate(prompt: Prompt, options: GenerationOptions?, tools: [any OpenFoundationModels.Tool]?) async throws -> String {
         // Convert Prompt to string using description property
         let promptText = prompt.description
-        return try await generate(prompt: promptText, options: options)
+        return try await generate(prompt: promptText, options: options, tools: tools)
     }
     
     /// Stream with Prompt object support
-    public func stream(prompt: Prompt, options: GenerationOptions?) -> AsyncStream<String> {
+    public func stream(prompt: Prompt, options: GenerationOptions?, tools: [any OpenFoundationModels.Tool]?) -> AsyncStream<String> {
         let promptText = prompt.description
-        return stream(prompt: promptText, options: options)
+        return stream(prompt: promptText, options: options, tools: tools)
     }
     
     // MARK: - Chat API with Tool Support

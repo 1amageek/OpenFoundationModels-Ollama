@@ -15,7 +15,8 @@
       "Bash(swift test:*)",
       "Bash(find:*)",
       "Bash(swift package describe:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(swift package:*)"
     ],
     "deny": []
   }
