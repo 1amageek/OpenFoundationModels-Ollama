@@ -44,12 +44,6 @@ struct ToolDefinitionBuilderTests {
         
         if let tool = tools?.first {
             let params = tool.function.parameters
-            print("DEBUG: Tool name = \(tool.function.name)")
-            print("DEBUG: Properties count = \(params.properties.count)")
-            print("DEBUG: Required count = \(params.required.count)")
-            print("DEBUG: Properties = \(params.properties.keys.sorted())")
-            print("DEBUG: Required = \(params.required)")
-            
             #expect(params.type == "object")
             #expect(params.properties.count == 3)
             #expect(params.required.count == 1)
