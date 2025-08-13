@@ -3,7 +3,7 @@ import Foundation
 @testable import OpenFoundationModelsOllama
 @testable import OpenFoundationModels
 
-@Suite("Real Tool Call Integration Tests")
+@Suite("Real Tool Call Integration Tests", .serialized)
 struct RealToolCallTests {
     
     private let defaultModel = "gpt-oss:20b"

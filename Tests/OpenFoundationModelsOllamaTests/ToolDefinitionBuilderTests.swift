@@ -3,7 +3,7 @@ import Foundation
 @testable import OpenFoundationModelsOllama
 @testable import OpenFoundationModels
 
-@Suite("Tool Definition Builder Tests")
+@Suite("Tool Definition Builder Tests", .serialized)
 struct ToolDefinitionBuilderTests {
     
     // Clean up registry before each test

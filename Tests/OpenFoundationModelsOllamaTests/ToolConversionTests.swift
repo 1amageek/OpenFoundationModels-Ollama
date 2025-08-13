@@ -4,35 +4,25 @@ import Foundation
 @testable import OpenFoundationModels
 @testable import OpenFoundationModelsCore
 
-@Suite("Tool Conversion Tests")
+@Suite("Tool Conversion Tests", .serialized)
 struct ToolConversionTests {
     
     // MARK: - GenerationSchema to Parameters Conversion Tests
     
     @Test("Convert GenerationSchema with properties to Tool.Function.Parameters")
     func testSchemaWithPropertiesToParameters() throws {
-        // Create a GenerationSchema with properties
-        let schema = GenerationSchema(
-            type: "object",
-            description: "Weather parameters",
-            properties: [
-                "location": GenerationSchema(
-                    type: "string",
-                    description: "The city name"
-                ),
-                "unit": GenerationSchema(
-                    type: "string",
-                    description: "Temperature unit (celsius or fahrenheit)"
-                )
-            ],
-            required: ["location"]
-        )
+        // Clear registry for clean test
+        ToolSchemaRegistry.shared.clear()
         
-        // Convert using TranscriptConverter
-        let toolDef = Transcript.ToolDefinition(
+        // Use ToolDefinitionBuilder instead of GenerationSchema directly
+        let toolDef = ToolDefinitionBuilder.createTool(
             name: "get_weather",
             description: "Get weather information",
-            parameters: schema
+            properties: [
+                "location": .string("The city name"),
+                "unit": .string("Temperature unit (celsius or fahrenheit)")
+            ],
+            required: ["location"]
         )
         
         var transcript = Transcript()
@@ -51,10 +41,10 @@ struct ToolConversionTests {
         
         // Verify the parameters were properly converted
         let params = tools?.first?.function.parameters
-        #expect(params?.properties.count == 2 || params?.properties.count == 0) // May be 0 if internal properties not accessible
+        #expect(params?.properties.count == 2)
         
-        // If properties were successfully extracted
-        if let props = params?.properties, props.count > 0 {
+        // Verify properties
+        if let props = params?.properties {
             #expect(props["location"]?.type == "string")
             #expect(props["unit"]?.type == "string")
             #expect(params?.required.contains("location") == true)

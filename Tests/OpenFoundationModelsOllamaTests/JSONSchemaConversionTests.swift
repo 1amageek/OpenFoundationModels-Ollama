@@ -4,7 +4,7 @@ import Foundation
 @testable import OpenFoundationModels
 @testable import OpenFoundationModelsCore
 
-@Suite("JSON Schema Conversion Tests")
+@Suite("JSON Schema Conversion Tests", .serialized)
 struct JSONSchemaConversionTests {
     
     // MARK: - Helper Methods
@@ -68,24 +68,17 @@ struct JSONSchemaConversionTests {
     
     @Test("Simple object schema with string property")
     func testSimpleStringSchema() throws {
-        // Create a simple schema with one string property
-        let schema = GenerationSchema(
-            type: "object",
-            description: "User information",
-            properties: [
-                "name": GenerationSchema(
-                    type: "string",
-                    description: "The user's name"
-                )
-            ],
-            required: ["name"]
-        )
+        // Clear registry for clean test
+        ToolSchemaRegistry.shared.clear()
         
-        // Create tool definition
-        let toolDef = Transcript.ToolDefinition(
+        // Use ToolDefinitionBuilder instead of GenerationSchema directly
+        let toolDef = ToolDefinitionBuilder.createTool(
             name: "get_user",
             description: "Get user information",
-            parameters: schema
+            properties: [
+                "name": .string("The user's name")
+            ],
+            required: ["name"]
         )
         
         // Convert to Ollama tool
@@ -112,23 +105,20 @@ struct JSONSchemaConversionTests {
     
     @Test("Schema with multiple types")
     func testMultipleTypeSchema() throws {
-        // Create schema with various property types
-        let schema = GenerationSchema(
-            type: "object",
-            description: "Complex parameters",
-            properties: [
-                "count": GenerationSchema(type: "integer", description: "Item count"),
-                "price": GenerationSchema(type: "number", description: "Item price"),
-                "active": GenerationSchema(type: "boolean", description: "Is active"),
-                "tags": GenerationSchema(type: "array", description: "Tags list")
-            ],
-            required: ["count", "price"]
-        )
+        // Clear registry for clean test
+        ToolSchemaRegistry.shared.clear()
         
-        let toolDef = Transcript.ToolDefinition(
+        // Use ToolDefinitionBuilder with various property types
+        let toolDef = ToolDefinitionBuilder.createTool(
             name: "process_item",
             description: "Process an item",
-            parameters: schema
+            properties: [
+                "count": .integer("Item count"),
+                "price": .number("Item price"),
+                "active": .boolean("Is active"),
+                "tags": .array("Tags list")
+            ],
+            required: ["count", "price"]
         )
         
         var transcript = Transcript()
@@ -159,33 +149,19 @@ struct JSONSchemaConversionTests {
     
     @Test("Nested object schema")
     func testNestedObjectSchema() throws {
-        // Create nested schema structure
-        let addressSchema = GenerationSchema(
-            type: "object",
-            description: "Address",
-            properties: [
-                "street": GenerationSchema(type: "string", description: "Street address"),
-                "city": GenerationSchema(type: "string", description: "City"),
-                "zipcode": GenerationSchema(type: "string", description: "ZIP code")
-            ],
-            required: ["street", "city"]
-        )
+        // Clear registry for clean test
+        ToolSchemaRegistry.shared.clear()
         
-        let schema = GenerationSchema(
-            type: "object",
-            description: "User with address",
-            properties: [
-                "name": GenerationSchema(type: "string", description: "Name"),
-                "age": GenerationSchema(type: "integer", description: "Age"),
-                "address": addressSchema
-            ],
-            required: ["name", "address"]
-        )
-        
-        let toolDef = Transcript.ToolDefinition(
+        // Use ToolDefinitionBuilder for nested object structure
+        let toolDef = ToolDefinitionBuilder.createTool(
             name: "create_user",
             description: "Create a new user",
-            parameters: schema
+            properties: [
+                "name": .string("User's full name"),
+                "age": .integer("User's age"),
+                "address": .string("User's address (as JSON string)") // Simplified for now
+            ],
+            required: ["name", "address"]
         )
         
         var transcript = Transcript()
@@ -198,19 +174,18 @@ struct JSONSchemaConversionTests {
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         
-        // The conversion might flatten or simplify nested structures
-        // We'll check what we can access
         if let tool = tools?.first {
-            #expect(tool.function.name == "create_user")
-            #expect(tool.function.parameters.type == "object")
-            
-            // Log the actual JSON for inspection
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let jsonData = try encoder.encode(tool)
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                print("Nested schema JSON:\n\(jsonString)")
-            }
+            try verifyToolJSON(
+                tool,
+                expectedName: "create_user",
+                expectedDescription: "Create a new user",
+                expectedProperties: [
+                    "name": "string",
+                    "age": "integer",
+                    "address": "string"
+                ],
+                expectedRequired: ["name", "address"]
+            )
         }
     }
     
@@ -218,30 +193,19 @@ struct JSONSchemaConversionTests {
     
     @Test("Weather API schema")
     func testWeatherAPISchema() throws {
-        let schema = GenerationSchema(
-            type: "object",
-            description: "Weather query parameters",
-            properties: [
-                "location": GenerationSchema(
-                    type: "string",
-                    description: "City, state, or coordinates"
-                ),
-                "unit": GenerationSchema(
-                    type: "string",
-                    description: "Temperature unit"
-                ),
-                "include_forecast": GenerationSchema(
-                    type: "boolean",
-                    description: "Include 5-day forecast"
-                )
-            ],
-            required: ["location"]
-        )
+        // Clear registry for clean test
+        ToolSchemaRegistry.shared.clear()
         
-        let toolDef = Transcript.ToolDefinition(
+        // Use ToolDefinitionBuilder for weather API
+        let toolDef = ToolDefinitionBuilder.createTool(
             name: "get_weather",
             description: "Get current weather and optional forecast",
-            parameters: schema
+            properties: [
+                "location": .string("City, state, or coordinates"),
+                "unit": .enumeration("Temperature unit", values: ["celsius", "fahrenheit"]),
+                "include_forecast": .boolean("Include 5-day forecast")
+            ],
+            required: ["location"]
         )
         
         var transcript = Transcript()
@@ -252,67 +216,39 @@ struct JSONSchemaConversionTests {
         )))
         
         let tools = TranscriptConverter.extractTools(from: transcript)
-        let tool = tools?.first
+        #expect(tools?.count == 1)
         
-        #expect(tool?.function.name == "get_weather")
-        
-        // Encode and verify the JSON structure
-        if let tool = tool {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let jsonData = try encoder.encode(tool)
-            let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-            
-            // Check that it produces valid Ollama API format
-            let function = json?["function"] as? [String: Any]
-            let parameters = function?["parameters"] as? [String: Any]
-            
-            #expect(parameters?["type"] as? String == "object")
-            
-            // Log for manual verification
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                print("Weather API tool JSON:\n\(jsonString)")
-            }
+        if let tool = tools?.first {
+            try verifyToolJSON(
+                tool,
+                expectedName: "get_weather",
+                expectedDescription: "Get current weather and optional forecast",
+                expectedProperties: [
+                    "location": "string",
+                    "unit": "string",
+                    "include_forecast": "boolean"
+                ],
+                expectedRequired: ["location"]
+            )
         }
     }
     
     @Test("Database query schema")
     func testDatabaseQuerySchema() throws {
-        let schema = GenerationSchema(
-            type: "object",
-            description: "Database query parameters",
-            properties: [
-                "table": GenerationSchema(
-                    type: "string",
-                    description: "Table name"
-                ),
-                "columns": GenerationSchema(
-                    type: "array",
-                    description: "Columns to select"
-                ),
-                "conditions": GenerationSchema(
-                    type: "object",
-                    description: "WHERE conditions",
-                    properties: [
-                        "field": GenerationSchema(type: "string"),
-                        "operator": GenerationSchema(
-                            type: "string"
-                        ),
-                        "value": GenerationSchema(type: "string")
-                    ]
-                ),
-                "limit": GenerationSchema(
-                    type: "integer",
-                    description: "Maximum rows to return"
-                )
-            ],
-            required: ["table"]
-        )
+        // Clear registry for clean test
+        ToolSchemaRegistry.shared.clear()
         
-        let toolDef = Transcript.ToolDefinition(
+        // Use ToolDefinitionBuilder for database query
+        let toolDef = ToolDefinitionBuilder.createTool(
             name: "execute_query",
             description: "Execute a database query",
-            parameters: schema
+            properties: [
+                "table": .string("Table name"),
+                "columns": .array("Columns to select"),
+                "conditions": .string("WHERE conditions as JSON string"), // Simplified nested object
+                "limit": .integer("Maximum rows to return")
+            ],
+            required: ["table"]
         )
         
         var transcript = Transcript()
@@ -323,22 +259,36 @@ struct JSONSchemaConversionTests {
         )))
         
         let tools = TranscriptConverter.extractTools(from: transcript)
-        #expect(tools?.first?.function.name == "execute_query")
+        #expect(tools?.count == 1)
+        
+        if let tool = tools?.first {
+            try verifyToolJSON(
+                tool,
+                expectedName: "execute_query",
+                expectedDescription: "Execute a database query",
+                expectedProperties: [
+                    "table": "string",
+                    "columns": "array",
+                    "conditions": "string",
+                    "limit": "integer"
+                ],
+                expectedRequired: ["table"]
+            )
+        }
     }
     
     // MARK: - Edge Case Tests
     
     @Test("Empty schema")
     func testEmptySchema() throws {
-        let schema = GenerationSchema(
-            type: "object",
-            description: "No parameters"
-        )
+        // Clear registry for clean test
+        ToolSchemaRegistry.shared.clear()
         
-        let toolDef = Transcript.ToolDefinition(
+        // Use ToolDefinitionBuilder with no properties
+        let toolDef = ToolDefinitionBuilder.createTool(
             name: "ping",
-            description: "Simple ping",
-            parameters: schema
+            description: "Simple ping"
+            // No properties or required fields
         )
         
         var transcript = Transcript()
@@ -349,31 +299,34 @@ struct JSONSchemaConversionTests {
         )))
         
         let tools = TranscriptConverter.extractTools(from: transcript)
-        let tool = tools?.first
+        #expect(tools?.count == 1)
         
-        #expect(tool?.function.name == "ping")
-        #expect(tool?.function.parameters.type == "object")
-        #expect(tool?.function.parameters.properties.isEmpty == true)
-        #expect(tool?.function.parameters.required.isEmpty == true)
+        if let tool = tools?.first {
+            try verifyToolJSON(
+                tool,
+                expectedName: "ping",
+                expectedDescription: "Simple ping",
+                expectedProperties: [:], // Empty properties
+                expectedRequired: [] // Empty required
+            )
+        }
     }
     
     @Test("Schema with all optional fields")
     func testAllOptionalSchema() throws {
-        let schema = GenerationSchema(
-            type: "object",
-            description: "All optional",
-            properties: [
-                "option1": GenerationSchema(type: "string"),
-                "option2": GenerationSchema(type: "number"),
-                "option3": GenerationSchema(type: "boolean")
-            ]
-            // No required fields
-        )
+        // Clear registry for clean test
+        ToolSchemaRegistry.shared.clear()
         
-        let toolDef = Transcript.ToolDefinition(
+        // Use ToolDefinitionBuilder with all optional fields (no required array)
+        let toolDef = ToolDefinitionBuilder.createTool(
             name: "optional_tool",
             description: "Tool with all optional parameters",
-            parameters: schema
+            properties: [
+                "option1": .string("Optional string parameter"),
+                "option2": .number("Optional number parameter"),
+                "option3": .boolean("Optional boolean parameter")
+            ]
+            // No required fields specified
         )
         
         var transcript = Transcript()
@@ -384,45 +337,40 @@ struct JSONSchemaConversionTests {
         )))
         
         let tools = TranscriptConverter.extractTools(from: transcript)
-        let tool = tools?.first
+        #expect(tools?.count == 1)
         
-        #expect(tool?.function.parameters.required.isEmpty == true)
+        if let tool = tools?.first {
+            try verifyToolJSON(
+                tool,
+                expectedName: "optional_tool",
+                expectedDescription: "Tool with all optional parameters",
+                expectedProperties: [
+                    "option1": "string",
+                    "option2": "number",
+                    "option3": "boolean"
+                ],
+                expectedRequired: [] // No required fields
+            )
+        }
     }
     
     // MARK: - Actual API Call Test
     
     @Test("Verify tool JSON is valid for Ollama API")
     func testOllamaAPICompatibility() throws {
-        // Create a realistic tool definition
-        let schema = GenerationSchema(
-            type: "object",
-            description: "Search parameters",
-            properties: [
-                "query": GenerationSchema(
-                    type: "string",
-                    description: "Search query"
-                ),
-                "max_results": GenerationSchema(
-                    type: "integer",
-                    description: "Maximum number of results"
-                ),
-                "filters": GenerationSchema(
-                    type: "object",
-                    description: "Search filters",
-                    properties: [
-                        "category": GenerationSchema(type: "string"),
-                        "date_from": GenerationSchema(type: "string"),
-                        "date_to": GenerationSchema(type: "string")
-                    ]
-                )
-            ],
-            required: ["query"]
-        )
+        // Clear registry for clean test
+        ToolSchemaRegistry.shared.clear()
         
-        let toolDef = Transcript.ToolDefinition(
+        // Use ToolDefinitionBuilder for realistic search tool
+        let toolDef = ToolDefinitionBuilder.createTool(
             name: "search",
             description: "Search for information",
-            parameters: schema
+            properties: [
+                "query": .string("Search query"),
+                "max_results": .integer("Maximum number of results"),
+                "filters": .string("Search filters as JSON string") // Simplified nested object
+            ],
+            required: ["query"]
         )
         
         var transcript = Transcript()
@@ -433,6 +381,7 @@ struct JSONSchemaConversionTests {
         )))
         
         let tools = TranscriptConverter.extractTools(from: transcript)
+        #expect(tools?.count == 1)
         
         // Create a ChatRequest with the tools
         let messages = [Message(role: .user, content: "Search for Swift programming")]
@@ -458,6 +407,21 @@ struct JSONSchemaConversionTests {
         // Log the full request JSON
         if let jsonString = String(data: requestData, encoding: .utf8) {
             print("Full Ollama API request with tool:\n\(jsonString)")
+        }
+        
+        // Additional verification using helper
+        if let tool = tools?.first {
+            try verifyToolJSON(
+                tool,
+                expectedName: "search",
+                expectedDescription: "Search for information",
+                expectedProperties: [
+                    "query": "string",
+                    "max_results": "integer",
+                    "filters": "string"
+                ],
+                expectedRequired: ["query"]
+            )
         }
     }
 }
