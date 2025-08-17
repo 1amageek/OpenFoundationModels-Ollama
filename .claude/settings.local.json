@@ -19,7 +19,9 @@
       "Bash(swift package:*)",
       "Bash(mv:*)",
       "WebFetch(domain:developer.apple.com)",
-      "Bash(remark:*)"
+      "Bash(remark:*)",
+      "Bash(sed:*)",
+      "Bash(swift:*)"
     ],
     "deny": []
   }
