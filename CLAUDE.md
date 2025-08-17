@@ -209,6 +209,65 @@ Each line is a complete JSON object:
    - First request may be slow (model loading)
    - Use `keep_alive` parameter to control model retention
 
+## Tool Calling Support
+
+### Overview
+The implementation fully supports Ollama's tool calling (function calling) feature, enabling models to request execution of specific functions during conversations.
+
+### Tool Definition
+Tools are automatically extracted from `Transcript.Instructions.toolDefinitions`:
+
+```swift
+// Define a tool in Transcript
+let weatherTool = Transcript.ToolDefinition(
+    name: "get_weather",
+    description: "Get current weather for a location",
+    parameters: weatherSchema
+)
+
+// Add to instructions
+var transcript = Transcript()
+transcript.append(.instructions(Instructions(
+    segments: [.text("You are a helpful assistant")],
+    toolDefinitions: [weatherTool]
+)))
+```
+
+### Tool Call Handling
+When the model decides to use a tool, it returns tool calls in the response:
+
+```swift
+// The model returns tool calls as JSON
+let response = try await model.generate(transcript: transcript)
+// Response format: {"tool_calls": [{"type": "tool_call", "name": "get_weather", "arguments": {...}}]}
+```
+
+### Sending Tool Results
+Tool execution results are sent back through the Transcript:
+
+```swift
+// Add tool output to transcript
+transcript.append(.toolOutput(ToolOutput(
+    toolName: "get_weather",
+    segments: [.text("11 degrees celsius, partly cloudy")]
+)))
+
+// Continue conversation with tool result
+let finalResponse = try await model.generate(transcript: transcript)
+```
+
+### Message Format
+The implementation correctly handles Ollama's tool message format:
+- Tool calls: Assistant messages with `tool_calls` array
+- Tool results: Tool role messages with `tool_name` field
+
+### Testing
+Comprehensive tests are included for:
+- Tool definition encoding/decoding
+- Tool call response parsing
+- Tool message round-trip encoding
+- Integration tests with actual Ollama API
+
 ## Future Improvements
 
 1. **Enhanced Schema Conversion**: Better mapping between GenerationSchema and Ollama parameters

@@ -64,9 +64,8 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
         // Handle tool calls if present
         if let toolCalls = response.message?.toolCalls,
            !toolCalls.isEmpty {
-            // For now, return a formatted string representation of tool calls
-            // In a full implementation, this would trigger tool execution
-            return formatToolCalls(toolCalls)
+            // Return JSON representation of tool calls for client to handle
+            return formatToolCallsAsJSON(toolCalls)
         }
         
         return response.message?.content ?? ""
@@ -105,7 +104,7 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                         // Handle tool calls in streaming
                         if let toolCalls = chunk.message?.toolCalls,
                            !toolCalls.isEmpty {
-                            continuation.yield(formatToolCalls(toolCalls))
+                            continuation.yield(formatToolCallsAsJSON(toolCalls))
                         }
                         
                         // Check if streaming is complete
@@ -130,13 +129,27 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     
     // MARK: - Private Helper Methods
     
-    /// Format tool calls as a string representation
-    private func formatToolCalls(_ toolCalls: [ToolCall]) -> String {
-        var result = "Tool calls:\n"
+    /// Format tool calls as JSON string for client processing
+    private func formatToolCallsAsJSON(_ toolCalls: [ToolCall]) -> String {
+        var toolCallsArray: [[String: Any]] = []
+        
         for toolCall in toolCalls {
-            result += "- \(toolCall.function.name)(\(toolCall.function.arguments.dictionary))\n"
+            let callDict: [String: Any] = [
+                "type": "tool_call",
+                "name": toolCall.function.name,
+                "arguments": toolCall.function.arguments.dictionary
+            ]
+            toolCallsArray.append(callDict)
         }
-        return result
+        
+        // Convert to JSON string
+        if let jsonData = try? JSONSerialization.data(withJSONObject: ["tool_calls": toolCallsArray]),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            return jsonString
+        }
+        
+        // Fallback to simple string representation
+        return "Tool calls: \(toolCalls.map { $0.function.name }.joined(separator: ", "))"
     }
     
     // MARK: - Chat API with Tool Support

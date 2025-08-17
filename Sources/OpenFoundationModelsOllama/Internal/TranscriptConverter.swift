@@ -11,7 +11,7 @@ internal struct TranscriptConverter {
     static func buildMessages(from transcript: Transcript) -> [Message] {
         var messages: [Message] = []
         
-        for entry in transcript.entries {
+        for entry in transcript {
             switch entry {
             case .instructions(let instructions):
                 // Convert instructions to system message
@@ -42,7 +42,11 @@ internal struct TranscriptConverter {
             case .toolOutput(let toolOutput):
                 // Convert tool output to tool message
                 let content = extractText(from: toolOutput.segments)
-                messages.append(Message(role: .tool, content: content))
+                messages.append(Message(
+                    role: .tool,
+                    content: content,
+                    toolName: toolOutput.toolName
+                ))
             }
         }
         
@@ -53,7 +57,7 @@ internal struct TranscriptConverter {
     
     /// Extract tool definitions from Transcript
     static func extractTools(from transcript: Transcript) -> [Tool]? {
-        for entry in transcript.entries {
+        for entry in transcript {
             if case .instructions(let instructions) = entry,
                !instructions.toolDefinitions.isEmpty {
                 return instructions.toolDefinitions.map { convertToolDefinition($0) }
@@ -67,7 +71,7 @@ internal struct TranscriptConverter {
     /// Extract response format from the most recent prompt
     static func extractResponseFormat(from transcript: Transcript) -> ResponseFormat? {
         // Look for the most recent prompt with a response format
-        for entry in transcript.entries.reversed() {
+        for entry in transcript.reversed() {
             if case .prompt(let prompt) = entry,
                let _ = prompt.responseFormat {
                 // For now, we'll default to JSON format when a response format is specified
@@ -82,7 +86,7 @@ internal struct TranscriptConverter {
     
     /// Extract generation options from the most recent prompt
     static func extractOptions(from transcript: Transcript) -> GenerationOptions? {
-        for entry in transcript.entries.reversed() {
+        for entry in transcript.reversed() {
             if case .prompt(let prompt) = entry {
                 return prompt.options
             }

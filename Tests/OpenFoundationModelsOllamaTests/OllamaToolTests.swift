@@ -63,6 +63,23 @@ struct OllamaToolTests {
         #expect(tool.function.parameters.required.contains("location"))
     }
     
+    @Test("Message with toolName encoding")
+    func testMessageWithToolName() throws {
+        let message = Message(
+            role: .tool,
+            content: "The weather in Tokyo is 11 degrees celsius",
+            toolName: "get_weather"
+        )
+        
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(message)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        
+        #expect(json?["role"] as? String == "tool")
+        #expect(json?["content"] as? String == "The weather in Tokyo is 11 degrees celsius")
+        #expect(json?["tool_name"] as? String == "get_weather")
+    }
+    
     @Test("Tool encoding to JSON")
     func testToolEncoding() throws {
         let tool = Tool(
@@ -178,6 +195,48 @@ struct OllamaToolTests {
         
         let toolCalls = json?["tool_calls"] as? [[String: Any]]
         #expect(toolCalls?.count == 1)
+    }
+    
+    @Test("Tool call response parsing")
+    func testToolCallResponseParsing() throws {
+        let toolCall = ToolCall(
+            function: ToolCall.FunctionCall(
+                name: "get_weather",
+                arguments: ["city": "Tokyo", "unit": "celsius"]
+            )
+        )
+        
+        let message = Message(
+            role: .assistant,
+            content: "",
+            toolCalls: [toolCall]
+        )
+        
+        #expect(message.toolCalls?.count == 1)
+        #expect(message.toolCalls?.first?.function.name == "get_weather")
+        #expect(message.toolCalls?.first?.function.arguments.dictionary["city"] as? String == "Tokyo")
+    }
+    
+    @Test("Tool message round-trip encoding")
+    func testToolMessageRoundTrip() throws {
+        // Create tool result message
+        let toolMessage = Message(
+            role: .tool,
+            content: "11 degrees celsius, partly cloudy",
+            toolName: "get_weather"
+        )
+        
+        // Encode to JSON
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(toolMessage)
+        
+        // Decode back
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(Message.self, from: data)
+        
+        #expect(decoded.role == .tool)
+        #expect(decoded.content == "11 degrees celsius, partly cloudy")
+        #expect(decoded.toolName == "get_weather")
     }
     
     // MARK: - Chat Request with Tools Tests
