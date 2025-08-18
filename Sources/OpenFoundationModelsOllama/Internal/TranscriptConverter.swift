@@ -82,6 +82,24 @@ internal struct TranscriptConverter {
         return nil
     }
     
+    /// Extract response format with full JSON Schema from the most recent prompt
+    /// Note: Due to private schema property in Transcript.ResponseFormat, 
+    /// we cannot extract the full schema through Transcript encoding.
+    /// This method returns .json when a ResponseFormat exists.
+    /// For full schema support, the schema needs to be passed separately.
+    static func extractResponseFormatWithSchema(from transcript: Transcript) -> ResponseFormat? {
+        // Try the simple extraction first
+        for entry in transcript.reversed() {
+            if case .prompt(let prompt) = entry,
+               let _ = prompt.responseFormat {
+                // We know there's a ResponseFormat but can't access the schema
+                // Return .json to enable structured output mode
+                return .json
+            }
+        }
+        return nil
+    }
+    
     // MARK: - Generation Options Extraction
     
     /// Extract generation options from the most recent prompt

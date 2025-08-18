@@ -304,7 +304,7 @@ public struct ArgumentsContainer: Codable, Sendable {
 }
 
 /// Helper type for encoding/decoding Any values
-private struct AnyCodable: Codable {
+struct AnyCodable: Codable {
     let value: Any
     
     init(_ value: Any) {
@@ -500,17 +500,29 @@ public struct OllamaOptions: Codable, Sendable {
 // MARK: - Response Format
 
 /// Response format specification
-public enum ResponseFormat: Codable, Sendable {
+public enum ResponseFormat: Codable, @unchecked Sendable {
     case text
     case json
+    case jsonSchema([String: Any])
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        let value = try container.decode(String.self)
-        switch value {
-        case "json":
-            self = .json
-        default:
+        
+        // Try to decode as string first
+        if let value = try? container.decode(String.self) {
+            switch value {
+            case "json":
+                self = .json
+            case "text":
+                self = .text
+            default:
+                self = .text
+            }
+        } else if let dict = try? container.decode(AnyCodable.self),
+                  let schemaDict = dict.value as? [String: Any] {
+            // Decode as JSON Schema object
+            self = .jsonSchema(schemaDict)
+        } else {
             self = .text
         }
     }
@@ -522,6 +534,10 @@ public enum ResponseFormat: Codable, Sendable {
             try container.encode("text")
         case .json:
             try container.encode("json")
+        case .jsonSchema(let schema):
+            // Encode JSON Schema object directly
+            let anyCodable = AnyCodable(schema)
+            try container.encode(anyCodable)
         }
     }
 }
