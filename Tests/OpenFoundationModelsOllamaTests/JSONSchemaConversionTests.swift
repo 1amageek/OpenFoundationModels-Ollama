@@ -81,12 +81,13 @@ struct JSONSchemaConversionTests {
         )
         
         // Convert to Ollama tool
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -114,12 +115,13 @@ struct JSONSchemaConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -146,12 +148,13 @@ struct JSONSchemaConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -180,12 +183,13 @@ struct JSONSchemaConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -212,12 +216,13 @@ struct JSONSchemaConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -246,12 +251,13 @@ struct JSONSchemaConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -278,12 +284,13 @@ struct JSONSchemaConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -312,12 +319,13 @@ struct JSONSchemaConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)

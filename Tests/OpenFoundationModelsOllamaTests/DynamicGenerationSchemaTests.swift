@@ -24,12 +24,13 @@ struct DynamicGenerationSchemaTests {
         #expect(tool.description == "Search for information")
         
         // Create transcript and extract tools
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [tool]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [tool]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -65,12 +66,13 @@ struct DynamicGenerationSchemaTests {
         #expect(weatherTool.description == "Get current weather and optional forecast")
         
         // Create transcript and extract
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [weatherTool]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [weatherTool]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -101,12 +103,13 @@ struct DynamicGenerationSchemaTests {
         #expect(calcTool.description == "Perform mathematical calculations")
         
         // Create transcript and extract
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [calcTool]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [calcTool]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -189,12 +192,13 @@ struct DynamicGenerationSchemaTests {
         )
         
         // Create transcript and extract
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -256,12 +260,13 @@ struct DynamicGenerationSchemaTests {
         )
         
         // Create transcript and extract
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)

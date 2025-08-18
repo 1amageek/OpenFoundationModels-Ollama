@@ -76,12 +76,13 @@ struct GenerationSchemaDebugTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         // Extract the tools and check the parameters conversion
         let tools = TranscriptConverter.extractTools(from: transcript)

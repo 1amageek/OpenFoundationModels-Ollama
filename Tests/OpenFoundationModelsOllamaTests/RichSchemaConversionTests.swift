@@ -42,12 +42,13 @@ struct RichSchemaConversionTests {
     func testWeatherAPIWithRichSchema() throws {
         let weatherTool = try ToolSchemaHelper.createWeatherTool()
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [weatherTool]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [weatherTool]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -65,12 +66,13 @@ struct RichSchemaConversionTests {
     func testCalculatorWithRichSchema() throws {
         let calcTool = try ToolSchemaHelper.createCalculatorTool()
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [calcTool]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [calcTool]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -98,12 +100,13 @@ struct RichSchemaConversionTests {
             required: ["query"]
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [searchTool]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [searchTool]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -144,12 +147,13 @@ struct RichSchemaConversionTests {
             required: ["table"]
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [dbTool]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [dbTool]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -235,12 +239,13 @@ struct RichSchemaConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -318,12 +323,13 @@ struct RichSchemaConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)

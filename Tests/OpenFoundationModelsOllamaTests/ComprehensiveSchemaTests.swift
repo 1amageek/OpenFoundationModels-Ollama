@@ -22,12 +22,13 @@ struct ComprehensiveSchemaTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -97,12 +98,13 @@ struct ComprehensiveSchemaTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -156,12 +158,13 @@ struct ComprehensiveSchemaTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
@@ -323,12 +326,13 @@ struct ComprehensiveSchemaTests {
         )
         
         // Test all tools can be converted and encoded
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [simpleToolDef, dynamicToolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [simpleToolDef, dynamicToolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 2)

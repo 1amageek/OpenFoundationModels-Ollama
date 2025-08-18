@@ -17,12 +17,13 @@ struct ToolSchemaComparisonTests {
             description: "Get some data"
         )
         
-        var transcript1 = Transcript()
-        transcript1.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [simpleTool]
-        )))
+        let transcript1 = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [simpleTool]
+            ))
+        ])
         
         let simpleTools = TranscriptConverter.extractTools(from: transcript1)
         if let tool = simpleTools?.first {
@@ -51,12 +52,13 @@ struct ToolSchemaComparisonTests {
             required: ["id"]
         )
         
-        var transcript2 = Transcript()
-        transcript2.append(.instructions(Transcript.Instructions(
-            id: "inst-2",
-            segments: [],
-            toolDefinitions: [dynamicTool]
-        )))
+        let transcript2 = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-2",
+                segments: [],
+                toolDefinitions: [dynamicTool]
+            ))
+        ])
         
         let dynamicTools = TranscriptConverter.extractTools(from: transcript2)
         if let tool = dynamicTools?.first {
@@ -86,12 +88,13 @@ struct ToolSchemaComparisonTests {
             description: "Get weather information"
         )
         
-        var transcript1 = Transcript()
-        transcript1.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [simpleWeather]
-        )))
+        let transcript1 = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [simpleWeather]
+            ))
+        ])
         
         let simpleTools = TranscriptConverter.extractTools(from: transcript1)
         if let tool = simpleTools?.first {
@@ -104,12 +107,13 @@ struct ToolSchemaComparisonTests {
         print("\n2. Dynamic Weather Tool:")
         let dynamicWeather = try ToolSchemaHelper.createWeatherTool()
         
-        var transcript2 = Transcript()
-        transcript2.append(.instructions(Transcript.Instructions(
-            id: "inst-2",
-            segments: [],
-            toolDefinitions: [dynamicWeather]
-        )))
+        let transcript2 = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-2",
+                segments: [],
+                toolDefinitions: [dynamicWeather]
+            ))
+        ])
         
         let dynamicTools = TranscriptConverter.extractTools(from: transcript2)
         if let tool = dynamicTools?.first {

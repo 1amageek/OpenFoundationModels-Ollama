@@ -144,22 +144,20 @@ struct OllamaLanguageModelTests {
     
     @Test("Transcript conversion to messages")
     func testTranscriptConversion() {
-        var transcript = Transcript()
-        
-        // Add instructions
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [.text(Transcript.TextSegment(id: "seg-1", content: "You are helpful"))],
-            toolDefinitions: []
-        )))
-        
-        // Add prompt
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "prompt-1",
-            segments: [.text(Transcript.TextSegment(id: "seg-2", content: "Hello"))],
-            options: GenerationOptions(),
-            responseFormat: nil
-        )))
+        // Create transcript with instructions and prompt
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-1", content: "You are helpful"))],
+                toolDefinitions: []
+            )),
+            .prompt(Transcript.Prompt(
+                id: "prompt-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-2", content: "Hello"))],
+                options: GenerationOptions(),
+                responseFormat: nil
+            ))
+        ])
         
         // Convert to messages
         let messages = TranscriptConverter.buildMessages(from: transcript)
@@ -173,7 +171,6 @@ struct OllamaLanguageModelTests {
     
     @Test("Tool extraction from transcript")
     func testToolExtractionFromTranscript() {
-        var transcript = Transcript()
         
         // Create a mock schema for testing
         let mockSchema = GenerationSchema(
@@ -187,11 +184,13 @@ struct OllamaLanguageModelTests {
             parameters: mockSchema
         )
         
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         // Extract tools
         let tools = TranscriptConverter.extractTools(from: transcript)

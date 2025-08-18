@@ -19,12 +19,13 @@ struct ToolConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         // Extract tools and verify
         let tools = TranscriptConverter.extractTools(from: transcript)
@@ -52,12 +53,13 @@ struct ToolConversionTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         
@@ -69,8 +71,6 @@ struct ToolConversionTests {
     
     @Test("Extract multiple tool definitions from transcript")
     func testMultipleToolExtraction() throws {
-        var transcript = Transcript()
-        
         let weatherTool = Transcript.ToolDefinition(
             name: "get_weather",
             description: "Get weather information",
@@ -83,11 +83,13 @@ struct ToolConversionTests {
             parameters: GenerationSchema(type: String.self, description: "Time params", properties: [])
         )
         
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [weatherTool, timeTool]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [weatherTool, timeTool]
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         
@@ -98,13 +100,13 @@ struct ToolConversionTests {
     
     @Test("No tools when transcript has no tool definitions")
     func testNoToolExtraction() throws {
-        var transcript = Transcript()
-        
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [.text(Transcript.TextSegment(id: "seg-1", content: "You are helpful"))],
-            toolDefinitions: []
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-1", content: "You are helpful"))],
+                toolDefinitions: []
+            ))
+        ])
         
         let tools = TranscriptConverter.extractTools(from: transcript)
         
@@ -131,8 +133,9 @@ struct ToolConversionTests {
         let toolCalls = Transcript.ToolCalls(id: "calls-1", [toolCall])
         
         // Build messages from transcript with tool calls
-        var transcript = Transcript()
-        transcript.append(.toolCalls(toolCalls))
+        let transcript = Transcript(entries: [
+            .toolCalls(toolCalls)
+        ])
         
         let messages = TranscriptConverter.buildMessages(from: transcript)
         
@@ -153,28 +156,12 @@ struct ToolConversionTests {
     
     @Test("Complete tool flow in transcript")
     func testCompleteToolFlow() throws {
-        var transcript = Transcript()
-        
         // 1. Add instructions with tool definition
         let weatherTool = Transcript.ToolDefinition(
             name: "get_weather",
             description: "Get weather for a location",
             parameters: GenerationSchema(type: String.self, description: "Weather parameters", properties: [])
         )
-        
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [.text(Transcript.TextSegment(id: "seg-1", content: "You can check weather"))],
-            toolDefinitions: [weatherTool]
-        )))
-        
-        // 2. Add user prompt
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "prompt-1",
-            segments: [.text(Transcript.TextSegment(id: "seg-2", content: "What's the weather in Tokyo?"))],
-            options: GenerationOptions(),
-            responseFormat: nil
-        )))
         
         // 3. Add tool call response
         let toolCall = Transcript.ToolCall(
@@ -188,21 +175,35 @@ struct ToolConversionTests {
             )
         )
         
-        transcript.append(.toolCalls(Transcript.ToolCalls(id: "calls-1", [toolCall])))
-        
-        // 4. Add tool output
-        transcript.append(.toolOutput(Transcript.ToolOutput(
-            id: "output-1",
-            toolName: "get_weather",
-            segments: [.text(Transcript.TextSegment(id: "seg-3", content: "72°F and sunny"))]
-        )))
-        
-        // 5. Add final response
-        transcript.append(.response(Transcript.Response(
-            id: "resp-1",
-            assetIDs: [],
-            segments: [.text(Transcript.TextSegment(id: "seg-4", content: "The weather in Tokyo is 72°F and sunny."))]
-        )))
+        let transcript = Transcript(entries: [
+            // 1. Instructions with tool definition
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-1", content: "You can check weather"))],
+                toolDefinitions: [weatherTool]
+            )),
+            // 2. User prompt
+            .prompt(Transcript.Prompt(
+                id: "prompt-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-2", content: "What's the weather in Tokyo?"))],
+                options: GenerationOptions(),
+                responseFormat: nil
+            )),
+            // 3. Tool call response
+            .toolCalls(Transcript.ToolCalls(id: "calls-1", [toolCall])),
+            // 4. Tool output
+            .toolOutput(Transcript.ToolOutput(
+                id: "output-1",
+                toolName: "get_weather",
+                segments: [.text(Transcript.TextSegment(id: "seg-3", content: "72°F and sunny"))]
+            )),
+            // 5. Final response
+            .response(Transcript.Response(
+                id: "resp-1",
+                assetIDs: [],
+                segments: [.text(Transcript.TextSegment(id: "seg-4", content: "The weather in Tokyo is 72°F and sunny."))]
+            ))
+        ])
         
         // Convert to messages
         let messages = TranscriptConverter.buildMessages(from: transcript)

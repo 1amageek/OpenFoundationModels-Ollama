@@ -30,28 +30,23 @@ struct TranscriptTests {
     @Test("Convert simple transcript to messages")
     func testSimpleTranscriptConversion() throws {
         // Create a simple transcript
-        var transcript = Transcript()
-        
-        // Add instructions
-        let instructions = Transcript.Instructions(
-            id: "inst-1",
-            segments: [
-                .text(Transcript.TextSegment(id: "seg-1", content: "You are a helpful assistant."))
-            ],
-            toolDefinitions: []
-        )
-        transcript.append(.instructions(instructions))
-        
-        // Add user prompt
-        let prompt = Transcript.Prompt(
-            id: "prompt-1",
-            segments: [
-                .text(Transcript.TextSegment(id: "seg-2", content: "Hello, how are you?"))
-            ],
-            options: GenerationOptions(),
-            responseFormat: nil
-        )
-        transcript.append(.prompt(prompt))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [
+                    .text(Transcript.TextSegment(id: "seg-1", content: "You are a helpful assistant."))
+                ],
+                toolDefinitions: []
+            )),
+            .prompt(Transcript.Prompt(
+                id: "prompt-1",
+                segments: [
+                    .text(Transcript.TextSegment(id: "seg-2", content: "Hello, how are you?"))
+                ],
+                options: GenerationOptions(),
+                responseFormat: nil
+            ))
+        ])
         
         // Convert to Ollama messages
         let messages = TranscriptConverter.buildMessages(from: transcript)
@@ -66,7 +61,6 @@ struct TranscriptTests {
     @Test("Extract tools from transcript")
     func testToolExtraction() throws {
         // Create transcript with tools
-        var transcript = Transcript()
         
         // Create a mock GenerationSchema for tool parameters
         // Since we can't easily create a proper GenerationSchema,
@@ -84,12 +78,13 @@ struct TranscriptTests {
             parameters: mockSchema
         )
         
-        let instructions = Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )
-        transcript.append(.instructions(instructions))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         // Extract tools
         let tools = TranscriptConverter.extractTools(from: transcript)
@@ -101,28 +96,26 @@ struct TranscriptTests {
     
     @Test("Handle conversation history")
     func testConversationHistory() throws {
-        var transcript = Transcript()
-        
-        // Add multiple exchanges
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "p1",
-            segments: [.text(Transcript.TextSegment(id: "s1", content: "What is 2+2?"))],
-            options: GenerationOptions(),
-            responseFormat: nil
-        )))
-        
-        transcript.append(.response(Transcript.Response(
-            id: "r1",
-            assetIDs: [],
-            segments: [.text(Transcript.TextSegment(id: "s2", content: "2+2 equals 4."))]
-        )))
-        
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "p2",
-            segments: [.text(Transcript.TextSegment(id: "s3", content: "What about 3+3?"))],
-            options: GenerationOptions(),
-            responseFormat: nil
-        )))
+        // Create transcript with multiple exchanges
+        let transcript = Transcript(entries: [
+            .prompt(Transcript.Prompt(
+                id: "p1",
+                segments: [.text(Transcript.TextSegment(id: "s1", content: "What is 2+2?"))],
+                options: GenerationOptions(),
+                responseFormat: nil
+            )),
+            .response(Transcript.Response(
+                id: "r1",
+                assetIDs: [],
+                segments: [.text(Transcript.TextSegment(id: "s2", content: "2+2 equals 4."))]
+            )),
+            .prompt(Transcript.Prompt(
+                id: "p2",
+                segments: [.text(Transcript.TextSegment(id: "s3", content: "What about 3+3?"))],
+                options: GenerationOptions(),
+                responseFormat: nil
+            ))
+        ])
         
         // Convert to messages
         let messages = TranscriptConverter.buildMessages(from: transcript)
@@ -152,20 +145,35 @@ struct TranscriptTests {
         }
         
         // Create a transcript
-        var transcript = Transcript()
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "test-prompt",
-            segments: [.text(Transcript.TextSegment(id: "seg-1", content: "Say 'Hello, World!' and nothing else."))],
-            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
-            responseFormat: nil
-        )))
+        let transcript = Transcript(entries: [
+            .prompt(Transcript.Prompt(
+                id: "test-prompt",
+                segments: [.text(Transcript.TextSegment(id: "seg-1", content: "Say 'Hello, World!' and nothing else."))],
+                options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
+                responseFormat: nil
+            ))
+        ])
         
         // Generate response
         let response = try await model.generate(transcript: transcript, options: nil)
         
-        
-        #expect(!response.isEmpty)
-        #expect(response.lowercased().contains("hello") || response.contains("world"))
+        // Check response based on entry type
+        switch response {
+        case .response(let responseData):
+            let content = responseData.segments.compactMap { segment -> String? in
+                if case .text(let text) = segment {
+                    return text.content
+                }
+                return nil
+            }.joined()
+            #expect(!content.isEmpty)
+            #expect(content.lowercased().contains("hello") || content.contains("world"))
+        case .toolCalls:
+            // Unexpected for this test
+            Issue.record("Unexpected tool calls")
+        default:
+            Issue.record("Unexpected response type")
+        }
     }
     
     @Test("Stream with transcript")
@@ -182,26 +190,39 @@ struct TranscriptTests {
         }
         
         // Create a transcript
-        var transcript = Transcript()
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "test-prompt",
-            segments: [.text(Transcript.TextSegment(id: "seg-1", content: "Count from 1 to 3."))],
-            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
-            responseFormat: nil
-        )))
+        let transcript = Transcript(entries: [
+            .prompt(Transcript.Prompt(
+                id: "test-prompt",
+                segments: [.text(Transcript.TextSegment(id: "seg-1", content: "Count from 1 to 3."))],
+                options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
+                responseFormat: nil
+            ))
+        ])
         
         // Stream response
-        var chunks: [String] = []
+        var receivedEntries: [Transcript.Entry] = []
         let stream = model.stream(transcript: transcript, options: nil)
         
-        for await chunk in stream {
-            chunks.append(chunk)
+        for await entry in stream {
+            receivedEntries.append(entry)
         }
         
-        #expect(chunks.count > 0)
+        #expect(receivedEntries.count > 0)
         
-        let fullResponse = chunks.joined()
-        #expect(!fullResponse.isEmpty)
+        // Extract text from response entries
+        let textContent = receivedEntries.compactMap { entry -> String? in
+            if case .response(let response) = entry {
+                return response.segments.compactMap { segment -> String? in
+                    if case .text(let text) = segment {
+                        return text.content
+                    }
+                    return nil
+                }.joined()
+            }
+            return nil
+        }.joined()
+        
+        #expect(!textContent.isEmpty)
     }
     
     @Test("Generate with tools in transcript")
@@ -218,8 +239,6 @@ struct TranscriptTests {
         }
         
         // Create transcript with tools
-        var transcript = Transcript()
-        
         let mockSchema = GenerationSchema(
             type: "object",
             description: "Time parameters",
@@ -233,24 +252,33 @@ struct TranscriptTests {
             parameters: mockSchema
         )
         
-        let instructions = Transcript.Instructions(
-            id: "inst-1",
-            segments: [.text(Transcript.TextSegment(id: "seg-1", content: "You can use tools when needed."))],
-            toolDefinitions: [toolDef]
-        )
-        transcript.append(.instructions(instructions))
-        
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "prompt-1",
-            segments: [.text(Transcript.TextSegment(id: "seg-2", content: "What time is it?"))],
-            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
-            responseFormat: nil
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-1", content: "You can use tools when needed."))],
+                toolDefinitions: [toolDef]
+            )),
+            .prompt(Transcript.Prompt(
+                id: "prompt-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-2", content: "What time is it?"))],
+                options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
+                responseFormat: nil
+            ))
+        ])
         
         // Generate response
         let response = try await model.generate(transcript: transcript, options: nil)
         
-        #expect(!response.isEmpty)
+        // Check response based on entry type
+        switch response {
+        case .response(let responseData):
+            #expect(responseData.segments.count > 0)
+        case .toolCalls(let toolCalls):
+            // Tool might be called for time
+            #expect(toolCalls.count > 0)
+        default:
+            Issue.record("Unexpected response type")
+        }
         // The model might either call the tool or provide a direct response
     }
 }

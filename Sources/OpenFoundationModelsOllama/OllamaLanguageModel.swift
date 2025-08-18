@@ -38,10 +38,10 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     
     // MARK: - LanguageModel Protocol Implementation
     
-    public func generate(transcript: Transcript, options: GenerationOptions?) async throws -> String {
+    public func generate(transcript: Transcript, options: GenerationOptions?) async throws -> Transcript.Entry {
         // Convert Transcript to Ollama format
         let messages = TranscriptConverter.buildMessages(from: transcript)
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let toolDefinitions = TranscriptConverter.extractTools(from: transcript)
         let responseFormat = TranscriptConverter.extractResponseFormat(from: transcript)
         
         // Use the options from the transcript if not provided
@@ -55,24 +55,24 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
             options: finalOptions?.toOllamaOptions(),
             format: responseFormat,
             keepAlive: configuration.keepAlive,
-            tools: tools
+            tools: toolDefinitions
         )
         
         let response: ChatResponse = try await httpClient.send(request, to: "/api/chat")
         
-        
-        // Handle tool calls if present
+        // Check for tool calls
         if let toolCalls = response.message?.toolCalls,
            !toolCalls.isEmpty {
-            // Return JSON representation of tool calls for client to handle
-            return formatToolCallsAsJSON(toolCalls)
+            // Return tool calls as Transcript.Entry
+            return createToolCallsEntry(from: toolCalls)
         }
         
-        return response.message?.content ?? ""
+        // Convert response to Transcript.Entry
+        return createResponseEntry(from: response)
     }
     
-    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<String> {
-        AsyncStream<String> { continuation in
+    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<Transcript.Entry> {
+        AsyncStream<Transcript.Entry> { continuation in
             Task {
                 do {
                     // Convert Transcript to Ollama format
@@ -95,20 +95,32 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                     
                     let streamResponse: AsyncThrowingStream<ChatResponse, Error> = await httpClient.stream(request, to: "/api/chat")
                     
+                    var accumulatedContent = ""
+                    var accumulatedToolCalls: [ToolCall] = []
+                    
                     for try await chunk in streamResponse {
-                        // Yield the response content
+                        // Accumulate content
                         if let content = chunk.message?.content, !content.isEmpty {
-                            continuation.yield(content)
+                            accumulatedContent += content
                         }
                         
-                        // Handle tool calls in streaming
-                        if let toolCalls = chunk.message?.toolCalls,
-                           !toolCalls.isEmpty {
-                            continuation.yield(formatToolCallsAsJSON(toolCalls))
+                        // Accumulate tool calls
+                        if let toolCalls = chunk.message?.toolCalls {
+                            accumulatedToolCalls.append(contentsOf: toolCalls)
                         }
                         
                         // Check if streaming is complete
                         if chunk.done {
+                            // If we have tool calls, return them
+                            if !accumulatedToolCalls.isEmpty {
+                                let entry = self.createToolCallsEntry(from: accumulatedToolCalls)
+                                continuation.yield(entry)
+                            } else {
+                                // Return normal response
+                                let entry = self.createResponseEntry(content: accumulatedContent)
+                                continuation.yield(entry)
+                            }
+                            
                             continuation.finish()
                             return
                         }
@@ -128,6 +140,58 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     }
     
     // MARK: - Private Helper Methods
+    
+    /// Create response entry from ChatResponse
+    private func createResponseEntry(from response: ChatResponse) -> Transcript.Entry {
+        let content = response.message?.content ?? ""
+        return createResponseEntry(content: content)
+    }
+    
+    /// Create tool calls entry from Ollama tool calls
+    private func createToolCallsEntry(from toolCalls: [ToolCall]) -> Transcript.Entry {
+        let transcriptToolCalls = toolCalls.map { toolCall in
+            // Convert Ollama tool call to Transcript tool call
+            let argumentsDict = toolCall.function.arguments.dictionary
+            let jsonData = (try? JSONSerialization.data(withJSONObject: argumentsDict)) ?? Data()
+            let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
+            
+            // Create GeneratedContent from JSON string, or use null if parsing fails
+            let argumentsContent: GeneratedContent
+            if let content = try? GeneratedContent(json: jsonString) {
+                argumentsContent = content
+            } else {
+                // Fallback to null GeneratedContent
+                argumentsContent = GeneratedContent(properties: [:])
+            }
+            
+            return Transcript.ToolCall(
+                id: UUID().uuidString,
+                toolName: toolCall.function.name,
+                arguments: argumentsContent
+            )
+        }
+        
+        return .toolCalls(
+            Transcript.ToolCalls(
+                id: UUID().uuidString,
+                transcriptToolCalls
+            )
+        )
+    }
+    
+    /// Create response entry from content string
+    private func createResponseEntry(content: String) -> Transcript.Entry {
+        return .response(
+            Transcript.Response(
+                id: UUID().uuidString,
+                assetIDs: [],
+                segments: [.text(Transcript.TextSegment(
+                    id: UUID().uuidString,
+                    content: content
+                ))]
+            )
+        )
+    }
     
     /// Format tool calls as JSON string for client processing
     private func formatToolCallsAsJSON(_ toolCalls: [ToolCall]) -> String {

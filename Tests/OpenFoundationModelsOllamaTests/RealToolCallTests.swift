@@ -44,26 +44,25 @@ struct RealToolCallTests {
         )
         
         // Create transcript with the tool
-        var transcript = Transcript()
-        
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [.text(Transcript.TextSegment(
-                id: "seg-1",
-                content: "You are a helpful assistant. When asked about weather, use the get_weather tool."
-            ))],
-            toolDefinitions: [weatherTool]
-        )))
-        
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "prompt-1",
-            segments: [.text(Transcript.TextSegment(
-                id: "seg-2",
-                content: "What's the weather in Tokyo?"
-            ))],
-            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 150),
-            responseFormat: nil
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [.text(Transcript.TextSegment(
+                    id: "seg-1",
+                    content: "You are a helpful assistant. When asked about weather, use the get_weather tool."
+                ))],
+                toolDefinitions: [weatherTool]
+            )),
+            .prompt(Transcript.Prompt(
+                id: "prompt-1",
+                segments: [.text(Transcript.TextSegment(
+                    id: "seg-2",
+                    content: "What's the weather in Tokyo?"
+                ))],
+                options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 150),
+                responseFormat: nil
+            ))
+        ])
         
         // Generate response
         print("Testing weather tool call with real Ollama API...")
@@ -71,14 +70,16 @@ struct RealToolCallTests {
         
         print("Response: \(response)")
         
-        // The response should either contain tool call information or a regular response
-        #expect(!response.isEmpty)
-        
-        // If it contains "get_weather" or tool call format, the tool was recognized
-        if response.contains("get_weather") || response.contains("Tool calls:") {
-            print("✅ Tool was called successfully!")
-        } else {
-            print("ℹ️ Model provided direct response: \(response)")
+        // Handle the response based on entry type
+        switch response {
+        case .toolCalls(let toolCalls):
+            print("✅ Tool was called successfully! Tools: \(toolCalls.map { $0.toolName })")
+            #expect(toolCalls.count > 0)
+        case .response(let responseData):
+            print("ℹ️ Model provided direct response: \(responseData.segments)")
+            #expect(responseData.segments.count > 0)
+        default:
+            print("⚠️ Unexpected response type: \(response)")
         }
     }
     
@@ -104,37 +105,41 @@ struct RealToolCallTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [.text(Transcript.TextSegment(
-                id: "seg-1", 
-                content: "You are a math assistant. Use the calculate tool when asked to perform calculations."
-            ))],
-            toolDefinitions: [calcTool]
-        )))
-        
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "prompt-1",
-            segments: [.text(Transcript.TextSegment(
-                id: "seg-2",
-                content: "Calculate 25 * 4 + 10"
-            ))],
-            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
-            responseFormat: nil
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [.text(Transcript.TextSegment(
+                    id: "seg-1", 
+                    content: "You are a math assistant. Use the calculate tool when asked to perform calculations."
+                ))],
+                toolDefinitions: [calcTool]
+            )),
+            .prompt(Transcript.Prompt(
+                id: "prompt-1",
+                segments: [.text(Transcript.TextSegment(
+                    id: "seg-2",
+                    content: "Calculate 25 * 4 + 10"
+                ))],
+                options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
+                responseFormat: nil
+            ))
+        ])
         
         print("Testing calculation tool call...")
         let response = try await model.generate(transcript: transcript, options: nil)
         
         print("Response: \(response)")
-        #expect(!response.isEmpty)
         
-        if response.contains("calculate") || response.contains("Tool calls:") {
-            print("✅ Calculation tool was called!")
-        } else {
-            print("ℹ️ Model provided direct calculation: \(response)")
+        // Handle the response based on entry type
+        switch response {
+        case .toolCalls(let toolCalls):
+            print("✅ Calculation tool was called! Tools: \(toolCalls.map { $0.toolName })")
+            #expect(toolCalls.count > 0)
+        case .response(let responseData):
+            print("ℹ️ Model provided direct calculation: \(responseData.segments)")
+            #expect(responseData.segments.count > 0)
+        default:
+            print("⚠️ Unexpected response type: \(response)")
         }
     }
     
@@ -153,12 +158,13 @@ struct RealToolCallTests {
             parameters: schema
         )
         
-        var transcript = Transcript()
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [],
-            toolDefinitions: [toolDef]
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [],
+                toolDefinitions: [toolDef]
+            ))
+        ])
         
         // Extract tools using our converter
         let tools = TranscriptConverter.extractTools(from: transcript)
@@ -229,32 +235,42 @@ struct RealToolCallTests {
             parameters: timeSchema
         )
         
-        var transcript = Transcript()
-        
-        transcript.append(.instructions(Transcript.Instructions(
-            id: "inst-1",
-            segments: [.text(Transcript.TextSegment(
-                id: "seg-1",
-                content: "You can check weather and time when asked."
-            ))],
-            toolDefinitions: [weatherTool, timeTool]
-        )))
-        
-        transcript.append(.prompt(Transcript.Prompt(
-            id: "prompt-1",
-            segments: [.text(Transcript.TextSegment(
-                id: "seg-2", 
-                content: "What's the weather in London and what time is it?"
-            ))],
-            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 200),
-            responseFormat: nil
-        )))
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [.text(Transcript.TextSegment(
+                    id: "seg-1",
+                    content: "You can check weather and time when asked."
+                ))],
+                toolDefinitions: [weatherTool, timeTool]
+            )),
+            .prompt(Transcript.Prompt(
+                id: "prompt-1",
+                segments: [.text(Transcript.TextSegment(
+                    id: "seg-2", 
+                    content: "What's the weather in London and what time is it?"
+                ))],
+                options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 200),
+                responseFormat: nil
+            ))
+        ])
         
         print("Testing multiple tools...")
         let response = try await model.generate(transcript: transcript, options: nil)
         
         print("Response: \(response)")
-        #expect(!response.isEmpty)
+        
+        // Handle the response based on entry type
+        switch response {
+        case .toolCalls(let toolCalls):
+            print("✅ Tools were called! Tools: \(toolCalls.map { $0.toolName })")
+            #expect(toolCalls.count > 0)
+        case .response(let responseData):
+            print("ℹ️ Model provided direct response: \(responseData.segments)")
+            #expect(responseData.segments.count > 0)
+        default:
+            print("⚠️ Unexpected response type: \(response)")
+        }
         
         print("✅ Multiple tools test completed")
     }
