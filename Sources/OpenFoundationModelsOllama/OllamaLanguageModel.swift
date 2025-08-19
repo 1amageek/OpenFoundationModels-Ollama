@@ -74,11 +74,32 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
         
         let response: ChatResponse = try await httpClient.send(request, to: "/api/chat")
         
-        // Check for tool calls
+        // Check for tool calls first
         if let toolCalls = response.message?.toolCalls,
            !toolCalls.isEmpty {
             // Return tool calls as Transcript.Entry
             return createToolCallsEntry(from: toolCalls)
+        }
+        
+        // Check if the response content contains tool_calls as structured data
+        // Some models might return tool calls as part of the content
+        if let content = response.message?.content,
+           !content.isEmpty,
+           content.contains("tool_calls") || content.contains("\"type\":\"tool_call\"") {
+            // Try to parse as JSON to see if it contains tool calls
+            if let data = content.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let toolCallsArray = json["tool_calls"] as? [[String: Any]] {
+                // Convert JSON tool calls to ToolCall objects
+                let toolCalls = toolCallsArray.compactMap { dict -> ToolCall? in
+                    guard let name = dict["name"] as? String ?? (dict["function"] as? [String: Any])?["name"] as? String else { return nil }
+                    let args = dict["arguments"] as? [String: Any] ?? (dict["function"] as? [String: Any])?["arguments"] as? [String: Any] ?? [:]
+                    return ToolCall(function: ToolCall.FunctionCall(name: name, arguments: args))
+                }
+                if !toolCalls.isEmpty {
+                    return createToolCallsEntry(from: toolCalls)
+                }
+            }
         }
         
         // Convert response to Transcript.Entry
@@ -132,7 +153,25 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                             if !accumulatedToolCalls.isEmpty {
                                 let entry = self.createToolCallsEntry(from: accumulatedToolCalls)
                                 continuation.yield(entry)
-                            } else {
+                            } else if !accumulatedContent.isEmpty {
+                                // Check if content contains tool calls as JSON
+                                if accumulatedContent.contains("tool_calls") || accumulatedContent.contains("\"type\":\"tool_call\"") {
+                                    if let data = accumulatedContent.data(using: .utf8),
+                                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                                       let toolCallsArray = json["tool_calls"] as? [[String: Any]] {
+                                        let toolCalls = toolCallsArray.compactMap { dict -> ToolCall? in
+                                            guard let name = dict["name"] as? String ?? (dict["function"] as? [String: Any])?["name"] as? String else { return nil }
+                                            let args = dict["arguments"] as? [String: Any] ?? (dict["function"] as? [String: Any])?["arguments"] as? [String: Any] ?? [:]
+                                            return ToolCall(function: ToolCall.FunctionCall(name: name, arguments: args))
+                                        }
+                                        if !toolCalls.isEmpty {
+                                            let entry = self.createToolCallsEntry(from: toolCalls)
+                                            continuation.yield(entry)
+                                            continuation.finish()
+                                            return
+                                        }
+                                    }
+                                }
                                 // Return normal response
                                 let entry = self.createResponseEntry(content: accumulatedContent)
                                 continuation.yield(entry)

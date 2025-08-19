@@ -58,28 +58,33 @@ struct TranscriptToolTests {
         )
         
         print("Response entry:")
+        var hasValidResponse = false
+        
         switch response {
         case .response(let resp):
             for segment in resp.segments {
                 switch segment {
                 case .text(let text):
                     print("Text: \(text.content)")
+                    // Accept any text response as valid - model may answer directly
+                    if !text.content.isEmpty {
+                        hasValidResponse = true
+                    }
                 case .structure(let structure):
                     print("Structure: \(structure.content)")
+                    hasValidResponse = true
                 }
             }
+        case .toolCalls(_):
+            print("Tool calls received")
+            // Note: calls property is private, so we just confirm we got tool calls
+            hasValidResponse = true
         default:
-            print("Unexpected response type")
+            print("Unexpected response type: \(response)")
         }
         
-        // Check if we got a response
-        let hasResponse = switch response {
-        case .response: true
-        default: false
-        }
-        
-        // Should have gotten a response
-        #expect(hasResponse)
+        // Should have gotten a valid response (either text or tool calls)
+        #expect(hasValidResponse)
     }
     
     @Test("Transcript with Multiple Tools")
@@ -127,13 +132,21 @@ struct TranscriptToolTests {
                 switch segment {
                 case .text(let text):
                     print("Text response: \(text.content)")
-                    foundResponse = true
-                case .structure:
+                    // Accept any non-empty text response
+                    if !text.content.isEmpty {
+                        foundResponse = true
+                    }
+                case .structure(let structure):
+                    print("Structure response: \(structure.content)")
                     foundResponse = true
                 }
             }
+        case .toolCalls(_):
+            print("Tool calls received")
+            // Note: calls property is private, so we just confirm we got tool calls
+            foundResponse = true
         default:
-            break
+            print("Unexpected response type: \(response)")
         }
         
         #expect(foundResponse)
@@ -191,7 +204,7 @@ struct TranscriptToolTests {
                 case .structure(let structure):
                     // Check if it's a tool call structure
                     if let props = try? structure.content.properties(),
-                       let toolCallsContent = props["tool_calls"] {
+                       let _ = props["tool_calls"] {
                         toolCalled = true
                         print("  Tool calls detected")
                         
@@ -352,6 +365,8 @@ struct TranscriptToolTests {
                         print("Streaming structure")
                     }
                 }
+            case .toolCalls:
+                print("Streaming tool calls received")
             default:
                 break
             }
@@ -359,12 +374,14 @@ struct TranscriptToolTests {
         
         #expect(entries.count > 0)
         
-        // Should have received response
+        // Should have received response or tool calls
         let hasContent = entries.contains { entry in
-            if case .response = entry {
+            switch entry {
+            case .response, .toolCalls:
                 return true
+            default:
+                return false
             }
-            return false
         }
         
         #expect(hasContent)
