@@ -5,9 +5,9 @@ import OpenFoundationModels
 public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     
     // MARK: - Properties
-    private let httpClient: OllamaHTTPClient
-    private let modelName: String
-    private let configuration: OllamaConfiguration
+    internal let httpClient: OllamaHTTPClient
+    internal let modelName: String
+    internal let configuration: OllamaConfiguration
     
     // MARK: - LanguageModel Protocol Compliance
     public var isAvailable: Bool {
@@ -148,13 +148,13 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     // MARK: - Private Helper Methods
     
     /// Create response entry from ChatResponse
-    private func createResponseEntry(from response: ChatResponse) -> Transcript.Entry {
+    internal func createResponseEntry(from response: ChatResponse) -> Transcript.Entry {
         let content = response.message?.content ?? ""
         return createResponseEntry(content: content)
     }
     
     /// Create tool calls entry from Ollama tool calls
-    private func createToolCallsEntry(from toolCalls: [ToolCall]) -> Transcript.Entry {
+    internal func createToolCallsEntry(from toolCalls: [ToolCall]) -> Transcript.Entry {
         let transcriptToolCalls = toolCalls.map { toolCall in
             // Convert Ollama tool call to Transcript tool call
             let argumentsDict = toolCall.function.arguments.dictionary
@@ -197,6 +197,114 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                 ))]
             )
         )
+    }
+    
+    // MARK: - Structured Output with GenerationSchema
+    
+    /// Generate with explicit JSON Schema for structured output
+    /// - Parameters:
+    ///   - transcript: The conversation transcript
+    ///   - schema: The GenerationSchema to use for structured output
+    ///   - options: Generation options
+    /// - Returns: The generated transcript entry
+    public func generate(
+        transcript: Transcript,
+        schema: GenerationSchema,
+        options: GenerationOptions? = nil
+    ) async throws -> Transcript.Entry {
+        // Encode GenerationSchema to get JSON Schema
+        let encoder = JSONEncoder()
+        let schemaData = try encoder.encode(schema)
+        
+        // Convert to JSON dictionary
+        guard let schemaJson = try JSONSerialization.jsonObject(with: schemaData) as? [String: Any] else {
+            // Fallback to regular generation if schema extraction fails
+            return try await generate(transcript: transcript, options: options)
+        }
+        
+        // Create ResponseFormat with the extracted JSON Schema
+        let responseFormat = ResponseFormat.jsonSchema(schemaJson)
+        
+        // Build messages and tools from transcript
+        let messages = TranscriptConverter.buildMessages(from: transcript)
+        let toolDefinitions = TranscriptConverter.extractTools(from: transcript)
+        
+        // Use the options from the transcript if not provided
+        let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
+        
+        // Create chat request with JSON Schema format
+        let request = ChatRequest(
+            model: modelName,
+            messages: messages,
+            stream: false,
+            options: finalOptions?.toOllamaOptions(),
+            format: responseFormat,
+            keepAlive: configuration.keepAlive,
+            tools: toolDefinitions
+        )
+        
+        // Send request
+        let response: ChatResponse = try await httpClient.send(request, to: "/api/chat")
+        
+        // Handle tool calls if present
+        if let toolCalls = response.message?.toolCalls, !toolCalls.isEmpty {
+            return createToolCallsEntry(from: toolCalls)
+        }
+        
+        // Return normal response
+        return createResponseEntry(from: response)
+    }
+    
+    /// Generate with a Generable type for structured output
+    /// - Parameters:
+    ///   - transcript: The conversation transcript
+    ///   - type: The Generable type to use for structured output
+    ///   - options: Generation options
+    /// - Returns: The generated transcript entry with structured content
+    public func generate<T: Generable>(
+        transcript: Transcript,
+        generating type: T.Type,
+        options: GenerationOptions? = nil
+    ) async throws -> (entry: Transcript.Entry, content: T) {
+        // Get the schema from the Generable type
+        let schema = T.generationSchema
+        
+        // Generate with the schema
+        let entry = try await generate(transcript: transcript, schema: schema, options: options)
+        
+        // Parse the response content
+        guard case .response(let response) = entry else {
+            throw OllamaLanguageModelError.unexpectedResponse("Expected response entry, got \(entry)")
+        }
+        
+        // Extract the content and parse it
+        let content = extractTextFromSegments(response.segments)
+        let generatedContent = try GeneratedContent(json: content)
+        let parsedContent = try T(generatedContent)
+        
+        return (entry, parsedContent)
+    }
+    
+    private func extractTextFromSegments(_ segments: [Transcript.Segment]) -> String {
+        var texts: [String] = []
+        
+        for segment in segments {
+            switch segment {
+            case .text(let textSegment):
+                texts.append(textSegment.content)
+                
+            case .structure(let structuredSegment):
+                // Convert structured content to string
+                if let jsonData = try? JSONEncoder().encode(structuredSegment.content),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    texts.append(jsonString)
+                } else {
+                    texts.append("[GeneratedContent]")
+                }
+            }
+        }
+        
+        return texts.joined(separator: " ")
     }
     
     /// Format tool calls as JSON string for client processing
@@ -306,6 +414,18 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                 modifiedAt: model.modifiedAt,
                 size: model.size
             )
+        }
+    }
+}
+
+// MARK: - Error Types
+public enum OllamaLanguageModelError: Error, LocalizedError {
+    case unexpectedResponse(String)
+    
+    public var errorDescription: String? {
+        switch self {
+        case .unexpectedResponse(let message):
+            return "Unexpected response: \(message)"
         }
     }
 }

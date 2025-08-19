@@ -83,21 +83,34 @@ internal struct TranscriptConverter {
     }
     
     /// Extract response format with full JSON Schema from the most recent prompt
-    /// Note: Due to private schema property in Transcript.ResponseFormat, 
-    /// we cannot extract the full schema through Transcript encoding.
-    /// This method returns .json when a ResponseFormat exists.
-    /// For full schema support, the schema needs to be passed separately.
+    /// This method encodes the ResponseFormat to extract the schema information
     static func extractResponseFormatWithSchema(from transcript: Transcript) -> ResponseFormat? {
-        // Try the simple extraction first
+        // Look for the most recent prompt with response format
         for entry in transcript.reversed() {
-            if case .prompt(let prompt) = entry,
-               let _ = prompt.responseFormat {
-                // We know there's a ResponseFormat but can't access the schema
-                // Return .json to enable structured output mode
-                return .json
+            if case .prompt(let prompt) = entry {
+                return extractResponseFormatFromPrompt(prompt)
             }
         }
         return nil
+    }
+    
+    /// Extract response format from a Prompt
+    /// Note: Due to OpenFoundationModels' ResponseFormatCoding implementation,
+    /// the schema is not included in the encoded JSON (set to nil).
+    /// This is a limitation in OpenFoundationModels/Sources/OpenFoundationModels/Transcript+Codable.swift
+    /// line 349: self.schema = nil
+    /// As a workaround, we detect ResponseFormat presence and return .json
+    static func extractResponseFormatFromPrompt(_ prompt: Transcript.Prompt) -> ResponseFormat? {
+        guard let _ = prompt.responseFormat else { return nil }
+        
+        // Unfortunately, we cannot extract the actual schema from ResponseFormat
+        // because OpenFoundationModels' Codable implementation doesn't encode it.
+        // The best we can do is detect that a ResponseFormat exists
+        // and enable JSON mode in Ollama.
+        
+        // Return .json to enable structured output mode in Ollama
+        // This will at least ensure the model returns valid JSON
+        return .json
     }
     
     // MARK: - Generation Options Extraction
