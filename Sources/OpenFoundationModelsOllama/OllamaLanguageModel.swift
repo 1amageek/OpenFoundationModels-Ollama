@@ -1,6 +1,17 @@
 import Foundation
 import OpenFoundationModels
 
+// MARK: - GenerationOptions Extension
+internal extension GenerationOptions {
+    func toOllamaOptions() -> OllamaOptions {
+        return OllamaOptions(
+            numPredict: maximumResponseTokens,
+            temperature: temperature,
+            topP: nil  // SamplingMode probabilityThreshold cannot be extracted
+        )
+    }
+}
+
 /// Ollama Language Model Provider for OpenFoundationModels
 public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     
@@ -305,29 +316,6 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
         }
         
         return texts.joined(separator: " ")
-    }
-    
-    /// Format tool calls as JSON string for client processing
-    private func formatToolCallsAsJSON(_ toolCalls: [ToolCall]) -> String {
-        var toolCallsArray: [[String: Any]] = []
-        
-        for toolCall in toolCalls {
-            let callDict: [String: Any] = [
-                "type": "tool_call",
-                "name": toolCall.function.name,
-                "arguments": toolCall.function.arguments.dictionary
-            ]
-            toolCallsArray.append(callDict)
-        }
-        
-        // Convert to JSON string
-        if let jsonData = try? JSONSerialization.data(withJSONObject: ["tool_calls": toolCallsArray]),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            return jsonString
-        }
-        
-        // Fallback to simple string representation
-        return "Tool calls: \(toolCalls.map { $0.function.name }.joined(separator: ", "))"
     }
     
     // MARK: - Chat API with Tool Support
