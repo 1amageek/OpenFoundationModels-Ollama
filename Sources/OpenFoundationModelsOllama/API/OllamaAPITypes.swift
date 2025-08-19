@@ -392,6 +392,17 @@ public struct ModelsResponse: Codable, Sendable {
     }
 }
 
+/// Request for /api/show endpoint
+public struct ShowRequest: Codable, Sendable {
+    public let name: String
+    public let verbose: Bool?
+    
+    public init(name: String, verbose: Bool? = nil) {
+        self.name = name
+        self.verbose = verbose
+    }
+}
+
 /// Response from /api/show endpoint
 public struct ShowResponse: Codable, Sendable {
     public let license: String?
