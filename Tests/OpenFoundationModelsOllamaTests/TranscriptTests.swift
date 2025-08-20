@@ -140,7 +140,7 @@ struct TranscriptTests {
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         
@@ -185,7 +185,7 @@ struct TranscriptTests {
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         
@@ -234,7 +234,7 @@ struct TranscriptTests {
         
         let model = OllamaLanguageModel(modelName: "gpt-oss:20b") // Use a model that supports tools
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model not available")
         }
         

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import OpenFoundationModelsOllama
 @testable import OpenFoundationModels
+import OpenFoundationModelsCore
 
 // TestSkip is defined in OllamaLanguageModelTests.swift
 
@@ -27,6 +28,89 @@ struct OllamaToolTests {
                 print("Unexpected error checking Ollama: \(error)")
                 return false
             }
+        }
+    }
+    
+    // MARK: - OllamaTool for Tags
+    
+    @Generable
+    struct OllamaTagsArguments {
+        @Guide(description: "Whether to include detailed model information")
+        let includeDetails: Bool?
+        
+        @Guide(description: "Filter models by name pattern")
+        let filter: String?
+    }
+    
+    struct OllamaTagsTool: OpenFoundationModels.Tool {
+        typealias Arguments = OllamaTagsArguments
+        typealias Output = String
+        
+        private let configuration: OllamaConfiguration
+        
+        init(configuration: OllamaConfiguration = OllamaConfiguration()) {
+            self.configuration = configuration
+        }
+        
+        var name: String { "get_ollama_models" }
+        var description: String { "Get list of available Ollama models installed on the system" }
+        var includesSchemaInInstructions: Bool { true }
+        
+        func call(arguments: OllamaTagsArguments) async throws -> String {
+            let httpClient = OllamaHTTPClient(configuration: configuration)
+            let response: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
+            
+            var models = response.models
+            
+            // Apply filter if provided
+            if let filter = arguments.filter, !filter.isEmpty {
+                models = models.filter { $0.name.lowercased().contains(filter.lowercased()) }
+            }
+            
+            if models.isEmpty {
+                return "No Ollama models found" + (arguments.filter != nil ? " matching filter '\(arguments.filter!)'." : ".")
+            }
+            
+            var result = "Available Ollama models:\n\n"
+            
+            for model in models {
+                result += "• \(model.name)"
+                
+                if arguments.includeDetails == true {
+                    // Add size information
+                    let sizeInMB = Double(model.size) / (1024 * 1024)
+                    let sizeInGB = sizeInMB / 1024
+                    let sizeStr = sizeInGB > 1.0 ? 
+                        String(format: "%.1fGB", sizeInGB) : 
+                        String(format: "%.0fMB", sizeInMB)
+                    result += " (\(sizeStr))"
+                    
+                    // Add details if available
+                    if let details = model.details {
+                        if let paramSize = details.parameterSize {
+                            result += "\n  - Parameters: \(paramSize)"
+                        }
+                        if let quantization = details.quantizationLevel {
+                            result += "\n  - Quantization: \(quantization)"
+                        }
+                        if let family = details.family {
+                            result += "\n  - Family: \(family)"
+                        }
+                    }
+                    
+                    // Add modified date
+                    let formatter = DateFormatter()
+                    formatter.dateStyle = .medium
+                    formatter.timeStyle = .short
+                    result += "\n  - Modified: \(formatter.string(from: model.modifiedAt))"
+                }
+                
+                result += "\n"
+            }
+            
+            result += "\nTotal: \(models.count) model(s)"
+            
+            return result
         }
     }
     
@@ -291,120 +375,57 @@ struct OllamaToolTests {
     
     // MARK: - Integration Tests (requires Ollama running)
     
-    @Test("Chat with tools integration")
+    @Test("Basic generate test")
     @available(macOS 13.0, iOS 16.0, *)
-    func testChatWithTools() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
+    func testBasicGenerate() async throws {
+        try await TestUtilities.checkPreconditions(modelName: defaultModel)
         
         let model = OllamaLanguageModel(modelName: defaultModel)
+        let transcript = Transcript(entries: [
+            .prompt(Transcript.Prompt(
+                segments: [.text(Transcript.TextSegment(content: "Say hello"))]
+            ))
+        ])
         
-        guard try await model.isModelAvailable() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
-        
-        // Create a simple tool
-        let weatherTool = Tool(
-            type: "function",
-            function: Tool.Function(
-                name: "get_weather",
-                description: "Get weather information for a city",
-                parameters: Tool.Function.Parameters(
-                    type: "object",
-                    properties: [
-                        "city": Tool.Function.Parameters.Property(
-                            type: "string",
-                            description: "The city name"
-                        )
-                    ],
-                    required: ["city"]
-                )
-            )
+        let responseEntry = try await model.generate(
+            transcript: transcript,
+            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 50)
         )
         
-        let messages = [
-            Message(role: .user, content: "What's the weather in Tokyo?")
-        ]
-        
-        let response = try await model.chat(
-            messages: messages,
-            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
-            tools: [weatherTool]
-        )
-        
-        #expect(response.model == defaultModel)
-        
-        // The model might either:
-        // 1. Call the tool (if it recognizes the need)
-        // 2. Respond directly (if it doesn't support tools or doesn't recognize the need)
-        if let toolCalls = response.message?.toolCalls, !toolCalls.isEmpty {
-            // Tool was called
-            #expect(toolCalls.first?.function.name == "get_weather")
-            let args = toolCalls.first?.function.arguments.dictionary
-            #expect(args?["city"] as? String != nil)
+        // Verify we got a response
+        if case .response(let response) = responseEntry {
+            #expect(!response.segments.isEmpty)
         } else {
-            // Direct response
-            #expect(response.message?.content != nil)
+            Issue.record("Expected response entry")
         }
     }
     
-    @Test("Stream chat with tools")
+    @Test("Basic stream test")
     @available(macOS 13.0, iOS 16.0, *)
-    func testStreamChatWithTools() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
+    func testBasicStream() async throws {
+        try await TestUtilities.checkPreconditions(modelName: defaultModel)
         
         let model = OllamaLanguageModel(modelName: defaultModel)
+        let transcript = Transcript(entries: [
+            .prompt(Transcript.Prompt(
+                segments: [.text(Transcript.TextSegment(content: "Say hello"))]
+            ))
+        ])
         
-        guard try await model.isModelAvailable() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
-        
-        let calculateTool = Tool(
-            type: "function",
-            function: Tool.Function(
-                name: "calculate",
-                description: "Perform calculations",
-                parameters: Tool.Function.Parameters(
-                    type: "object",
-                    properties: [
-                        "expression": Tool.Function.Parameters.Property(
-                            type: "string",
-                            description: "Math expression to evaluate"
-                        )
-                    ],
-                    required: ["expression"]
-                )
-            )
+        var responseCount = 0
+        let stream = model.stream(
+            transcript: transcript,
+            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 20)
         )
         
-        let messages = [
-            Message(role: .user, content: "Calculate 25 * 4")
-        ]
-        
-        var responses: [ChatResponse] = []
-        let stream = model.streamChat(
-            messages: messages,
-            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 50),
-            tools: [calculateTool]
-        )
-        
-        for try await response in stream {
-            responses.append(response)
-            if response.done {
-                break
+        for await entry in stream {
+            responseCount += 1
+            if case .response(let response) = entry {
+                #expect(!response.segments.isEmpty)
             }
         }
         
-        #expect(responses.count > 0)
-        
-        // Check if we got a complete response
-        if let lastResponse = responses.last {
-            #expect(lastResponse.done == true)
-            #expect(lastResponse.model == defaultModel)
-        }
+        #expect(responseCount > 0)
     }
     
     // MARK: - Tool Response Handling Tests
@@ -421,67 +442,225 @@ struct OllamaToolTests {
         #expect(toolResponseMessage.toolCalls == nil)
     }
     
-    @Test("Complete tool interaction flow")
-    @available(macOS 13.0, iOS 16.0, *)
-    func testCompleteToolFlow() async throws {
+    
+    // MARK: - OllamaTool Session Tests
+    
+    @Test("Natural language request for Ollama models")
+    func testNaturalLanguageModelList() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running")
         }
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         
-        // Define a simple tool
-        let tool = Tool(
-            type: "function",
-            function: Tool.Function(
-                name: "get_time",
-                description: "Get the current time",
-                parameters: Tool.Function.Parameters(
-                    type: "object",
-                    properties: [:],
-                    required: []
-                )
-            )
+        let tool = OllamaTagsTool()
+        
+        let session = LanguageModelSession(
+            model: model,
+            tools: [tool],
+            instructions: "You are an assistant that helps users understand available Ollama models. When asked about available models, use the get_ollama_models tool."
         )
         
-        // Initial user message
-        var messages = [
-            Message(role: .user, content: "What time is it?")
-        ]
-        
-        // First call - might trigger tool call
-        let response1 = try await model.chat(
-            messages: messages,
-            options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100),
-            tools: [tool]
+        let response = try await session.respond(
+            to: "What Ollama models are available on my system?",
+            options: GenerationOptions(temperature: 0.1)
         )
         
-        if let assistantMessage = response1.message {
-            messages.append(assistantMessage)
-            
-            // If tool was called, add tool response
-            if let toolCalls = assistantMessage.toolCalls, !toolCalls.isEmpty {
-                // Simulate tool execution
-                let toolResponse = Message(
-                    role: .tool,
-                    content: "The current time is 3:30 PM"
-                )
-                messages.append(toolResponse)
-                
-                // Get final response
-                let response2 = try await model.chat(
-                    messages: messages,
-                    options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 100)
-                )
-                
-                #expect(response2.message?.content != nil)
+        print("Response: \(response.content)")
+        
+        // Check if tool was called
+        var toolWasCalled = false
+        for entry in session.transcript {
+            if case .toolCalls(let toolCalls) = entry {
+                toolWasCalled = toolCalls.contains { $0.toolName == "get_ollama_models" }
+                if toolWasCalled {
+                    print("✅ Tool was called successfully")
+                    break
+                }
             }
         }
         
-        #expect(messages.count >= 2)
+        if !toolWasCalled {
+            print("ℹ️ Model provided direct answer without using tool")
+        }
+        
+        // Response should contain model information either way
+        #expect(!response.content.isEmpty)
+    }
+    
+    @Test("Request models with details")
+    func testModelsWithDetails() async throws {
+        guard await isOllamaAvailable else {
+            throw TestSkip(reason: "Ollama is not running")
+        }
+        
+        let model = OllamaLanguageModel(modelName: defaultModel)
+        
+        guard try await model.checkModelAvailability() else {
+            throw TestSkip(reason: "Model \(defaultModel) not available")
+        }
+        
+        let tool = OllamaTagsTool()
+        
+        let session = LanguageModelSession(
+            model: model,
+            tools: [tool],
+            instructions: "You are an assistant that helps users understand available Ollama models. When asked about models, use the get_ollama_models tool with includeDetails set to true when the user wants detailed information."
+        )
+        
+        let response = try await session.respond(
+            to: "Show me all Ollama models with their detailed information including size and parameters.",
+            options: GenerationOptions(temperature: 0.1)
+        )
+        
+        print("Response with details: \(response.content)")
+        
+        // Check if tool was called with includeDetails
+        var toolCalledWithDetails = false
+        for entry in session.transcript {
+            if case .toolCalls(let toolCalls) = entry {
+                for toolCall in toolCalls {
+                    if toolCall.toolName == "get_ollama_models" {
+                        do {
+                            let args = try OllamaTagsArguments(toolCall.arguments)
+                            if args.includeDetails == true {
+                                toolCalledWithDetails = true
+                                print("✅ Tool was called with includeDetails=true")
+                            }
+                        } catch {
+                            print("Failed to parse arguments: \(error)")
+                        }
+                    }
+                }
+            }
+        }
+        
+        #expect(!response.content.isEmpty)
+    }
+    
+    @Test("Verify tool call in transcript")
+    func testToolCallInTranscript() async throws {
+        guard await isOllamaAvailable else {
+            throw TestSkip(reason: "Ollama is not running")
+        }
+        
+        let model = OllamaLanguageModel(modelName: defaultModel)
+        
+        guard try await model.checkModelAvailability() else {
+            throw TestSkip(reason: "Model \(defaultModel) not available")
+        }
+        
+        let tool = OllamaTagsTool()
+        
+        let session = LanguageModelSession(
+            model: model,
+            tools: [tool],
+            instructions: "You are an assistant. Always use the get_ollama_models tool when asked about available models."
+        )
+        
+        let _ = try await session.respond(
+            to: "List the Ollama models.",
+            options: GenerationOptions(temperature: 0.1)
+        )
+        
+        // Analyze transcript
+        var hasInstructions = false
+        var hasPrompt = false
+        var hasToolCalls = false
+        var hasToolOutput = false
+        var hasResponse = false
+        
+        for entry in session.transcript {
+            switch entry {
+            case .instructions(let instructions):
+                hasInstructions = true
+                // Check if tool definitions are present
+                let toolDefs = instructions.toolDefinitions
+                #expect(toolDefs.count == 1)
+                #expect(toolDefs.first?.name == "get_ollama_models")
+                print("✅ Instructions with tool definitions found")
+                
+            case .prompt:
+                hasPrompt = true
+                print("✅ User prompt found")
+                
+            case .toolCalls(let toolCalls):
+                hasToolCalls = true
+                #expect(toolCalls.count > 0)
+                print("✅ Tool calls found: \(toolCalls.map { $0.toolName })")
+                
+            case .toolOutput(let output):
+                hasToolOutput = true
+                print("✅ Tool output found for: \(output.toolName)")
+                
+            case .response:
+                hasResponse = true
+                print("✅ Model response found")
+            }
+        }
+        
+        #expect(hasInstructions)
+        #expect(hasPrompt)
+        #expect(hasResponse)
+        
+        // Tool calls and output may or may not be present depending on model behavior
+        if hasToolCalls {
+            print("Model used the tool")
+            #expect(hasToolOutput, "If tool was called, output should be present")
+        } else {
+            print("Model provided direct answer without tool")
+        }
+    }
+    
+    @Test("Filter models by name")
+    func testFilterModelsByName() async throws {
+        guard await isOllamaAvailable else {
+            throw TestSkip(reason: "Ollama is not running")
+        }
+        
+        let model = OllamaLanguageModel(modelName: defaultModel)
+        
+        guard try await model.checkModelAvailability() else {
+            throw TestSkip(reason: "Model \(defaultModel) not available")
+        }
+        
+        let tool = OllamaTagsTool()
+        
+        let session = LanguageModelSession(
+            model: model,
+            tools: [tool],
+            instructions: "You are an assistant. Use the get_ollama_models tool with appropriate filter when users ask about specific models."
+        )
+        
+        let response = try await session.respond(
+            to: "Show me only the llama models available.",
+            options: GenerationOptions(temperature: 0.1)
+        )
+        
+        print("Filtered response: \(response.content)")
+        
+        // Check if filter was used
+        for entry in session.transcript {
+            if case .toolCalls(let toolCalls) = entry {
+                for toolCall in toolCalls {
+                    if toolCall.toolName == "get_ollama_models" {
+                        do {
+                            let args = try OllamaTagsArguments(toolCall.arguments)
+                            if let filter = args.filter {
+                                print("✅ Tool was called with filter: '\(filter)'")
+                            }
+                        } catch {
+                            print("Failed to parse arguments: \(error)")
+                        }
+                    }
+                }
+            }
+        }
+        
+        #expect(!response.content.isEmpty)
     }
 }

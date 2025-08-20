@@ -159,6 +159,24 @@ public struct Message: Codable, Sendable {
         case toolCalls = "tool_calls"
         case toolName = "tool_name"
     }
+    
+    // Custom decoder to handle empty role strings
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Handle role field that might be empty string or nil
+        if let roleString = try? container.decode(String.self, forKey: .role), !roleString.isEmpty {
+            self.role = Role(rawValue: roleString) ?? .assistant
+        } else {
+            // Default to assistant role if role is empty or missing
+            self.role = .assistant
+        }
+        
+        self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        self.toolCalls = try container.decodeIfPresent([ToolCall].self, forKey: .toolCalls)
+        self.thinking = try container.decodeIfPresent(String.self, forKey: .thinking)
+        self.toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
+    }
 }
 
 /// Message role

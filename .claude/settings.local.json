@@ -21,7 +21,9 @@
       "WebFetch(domain:developer.apple.com)",
       "Bash(remark:*)",
       "Bash(sed:*)",
-      "Bash(swift:*)"
+      "Bash(swift:*)",
+      "Bash(cp:*)",
+      "WebFetch(domain:cookbook.openai.com)"
     ],
     "deny": []
   }

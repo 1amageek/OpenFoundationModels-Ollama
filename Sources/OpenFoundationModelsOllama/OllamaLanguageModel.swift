@@ -51,12 +51,32 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     
     public func generate(transcript: Transcript, options: GenerationOptions?) async throws -> Transcript.Entry {
         // Convert Transcript to Ollama format
-        let messages = TranscriptConverter.buildMessages(from: transcript)
+        var messages = TranscriptConverter.buildMessages(from: transcript)
         let toolDefinitions = TranscriptConverter.extractTools(from: transcript)
         
         // Try to extract response format with full schema first, fallback to simple format
         let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
             ?? TranscriptConverter.extractResponseFormat(from: transcript)
+        
+        // Check if this is a gpt-oss model that requires harmony format
+        let isGptOssModel = modelName.lowercased().hasPrefix("gpt-oss")
+        
+        // Handle response format based on model type
+        var finalResponseFormat: ResponseFormat? = nil
+        
+        if let format = responseFormat {
+            if isGptOssModel {
+                // For gpt-oss models, add Response Formats to system message instead of using format parameter
+                addHarmonyResponseFormat(to: &messages, format: format)
+                // Don't use format parameter for gpt-oss models
+                finalResponseFormat = nil
+            } else {
+                // For other models, use format parameter and add user instructions
+                finalResponseFormat = format
+                addFormatInstructions(to: &messages, format: format)
+            }
+        }
+        
         
         // Use the options from the transcript if not provided
         let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
@@ -67,39 +87,17 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
             messages: messages,
             stream: false,
             options: finalOptions?.toOllamaOptions(),
-            format: responseFormat,
+            format: finalResponseFormat,
             keepAlive: configuration.keepAlive,
             tools: toolDefinitions
         )
         
         let response: ChatResponse = try await httpClient.send(request, to: "/api/chat")
         
-        // Check for tool calls first
+        // Check for tool calls
         if let toolCalls = response.message?.toolCalls,
            !toolCalls.isEmpty {
-            // Return tool calls as Transcript.Entry
             return createToolCallsEntry(from: toolCalls)
-        }
-        
-        // Check if the response content contains tool_calls as structured data
-        // Some models might return tool calls as part of the content
-        if let content = response.message?.content,
-           !content.isEmpty,
-           content.contains("tool_calls") || content.contains("\"type\":\"tool_call\"") {
-            // Try to parse as JSON to see if it contains tool calls
-            if let data = content.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let toolCallsArray = json["tool_calls"] as? [[String: Any]] {
-                // Convert JSON tool calls to ToolCall objects
-                let toolCalls = toolCallsArray.compactMap { dict -> ToolCall? in
-                    guard let name = dict["name"] as? String ?? (dict["function"] as? [String: Any])?["name"] as? String else { return nil }
-                    let args = dict["arguments"] as? [String: Any] ?? (dict["function"] as? [String: Any])?["arguments"] as? [String: Any] ?? [:]
-                    return ToolCall(function: ToolCall.FunctionCall(name: name, arguments: args))
-                }
-                if !toolCalls.isEmpty {
-                    return createToolCallsEntry(from: toolCalls)
-                }
-            }
         }
         
         // Convert response to Transcript.Entry
@@ -107,7 +105,7 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     }
     
     public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<Transcript.Entry> {
-        AsyncStream<Transcript.Entry> { continuation in
+        return AsyncStream { continuation in
             Task {
                 do {
                     // Convert Transcript to Ollama format
@@ -133,47 +131,35 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                     
                     let streamResponse: AsyncThrowingStream<ChatResponse, Error> = await httpClient.stream(request, to: "/api/chat")
                     
-                    var accumulatedContent = ""
                     var accumulatedToolCalls: [ToolCall] = []
+                    var hasYieldedContent = false
                     
                     for try await chunk in streamResponse {
-                        // Accumulate content
-                        if let content = chunk.message?.content, !content.isEmpty {
-                            accumulatedContent += content
+                        // Stream each content chunk immediately
+                        // Check both content and thinking fields (some models use thinking for streaming)
+                        let textContent = chunk.message?.content ?? chunk.message?.thinking ?? ""
+                        if !textContent.isEmpty {
+                            let entry = self.createResponseEntry(content: textContent)
+                            continuation.yield(entry)
+                            hasYieldedContent = true
                         }
                         
-                        // Accumulate tool calls
+                        // Accumulate tool calls (these typically come all at once)
                         if let toolCalls = chunk.message?.toolCalls {
                             accumulatedToolCalls.append(contentsOf: toolCalls)
                         }
                         
                         // Check if streaming is complete
                         if chunk.done {
-                            // If we have tool calls, return them
+                            // If we accumulated tool calls, yield them
                             if !accumulatedToolCalls.isEmpty {
                                 let entry = self.createToolCallsEntry(from: accumulatedToolCalls)
                                 continuation.yield(entry)
-                            } else if !accumulatedContent.isEmpty {
-                                // Check if content contains tool calls as JSON
-                                if accumulatedContent.contains("tool_calls") || accumulatedContent.contains("\"type\":\"tool_call\"") {
-                                    if let data = accumulatedContent.data(using: .utf8),
-                                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                                       let toolCallsArray = json["tool_calls"] as? [[String: Any]] {
-                                        let toolCalls = toolCallsArray.compactMap { dict -> ToolCall? in
-                                            guard let name = dict["name"] as? String ?? (dict["function"] as? [String: Any])?["name"] as? String else { return nil }
-                                            let args = dict["arguments"] as? [String: Any] ?? (dict["function"] as? [String: Any])?["arguments"] as? [String: Any] ?? [:]
-                                            return ToolCall(function: ToolCall.FunctionCall(name: name, arguments: args))
-                                        }
-                                        if !toolCalls.isEmpty {
-                                            let entry = self.createToolCallsEntry(from: toolCalls)
-                                            continuation.yield(entry)
-                                            continuation.finish()
-                                            return
-                                        }
-                                    }
-                                }
-                                // Return normal response
-                                let entry = self.createResponseEntry(content: accumulatedContent)
+                            }
+                            
+                            // If we never yielded any content, yield an empty response to avoid empty stream
+                            if !hasYieldedContent && accumulatedToolCalls.isEmpty {
+                                let entry = self.createResponseEntry(content: "")
                                 continuation.yield(entry)
                             }
                             
@@ -199,7 +185,8 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     
     /// Create response entry from ChatResponse
     internal func createResponseEntry(from response: ChatResponse) -> Transcript.Entry {
-        let content = response.message?.content ?? ""
+        // Check both content and thinking fields (some models use thinking instead of content)
+        let content = response.message?.content ?? response.message?.thinking ?? ""
         return createResponseEntry(content: content)
     }
     
@@ -249,218 +236,132 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
         )
     }
     
-    // MARK: - Structured Output with GenerationSchema
     
-    /// Generate with explicit JSON Schema for structured output
-    /// - Parameters:
-    ///   - transcript: The conversation transcript
-    ///   - schema: The GenerationSchema to use for structured output
-    ///   - options: Generation options
-    /// - Returns: The generated transcript entry
-    public func generate(
-        transcript: Transcript,
-        schema: GenerationSchema,
-        options: GenerationOptions? = nil
-    ) async throws -> Transcript.Entry {
-        // Encode GenerationSchema to get JSON Schema
-        let encoder = JSONEncoder()
-        let schemaData = try encoder.encode(schema)
-        
-        // Convert to JSON dictionary
-        guard let schemaJson = try JSONSerialization.jsonObject(with: schemaData) as? [String: Any] else {
-            // Fallback to regular generation if schema extraction fails
-            return try await generate(transcript: transcript, options: options)
-        }
-        
-        // Create ResponseFormat with the extracted JSON Schema
-        let responseFormat = ResponseFormat.jsonSchema(schemaJson)
-        
-        // Build messages and tools from transcript
-        let messages = TranscriptConverter.buildMessages(from: transcript)
-        let toolDefinitions = TranscriptConverter.extractTools(from: transcript)
-        
-        // Use the options from the transcript if not provided
-        let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
-        
-        // Create chat request with JSON Schema format
-        let request = ChatRequest(
-            model: modelName,
-            messages: messages,
-            stream: false,
-            options: finalOptions?.toOllamaOptions(),
-            format: responseFormat,
-            keepAlive: configuration.keepAlive,
-            tools: toolDefinitions
-        )
-        
-        // Send request
-        let response: ChatResponse = try await httpClient.send(request, to: "/api/chat")
-        
-        // Handle tool calls if present
-        if let toolCalls = response.message?.toolCalls, !toolCalls.isEmpty {
-            return createToolCallsEntry(from: toolCalls)
-        }
-        
-        // Return normal response
-        return createResponseEntry(from: response)
+    // MARK: - Internal Helper Methods for Testing
+    
+    /// Check if model is available (for testing only)
+    internal func checkModelAvailability() async throws -> Bool {
+        let response: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
+        return response.models.contains { $0.name == modelName || $0.name.hasPrefix("\(modelName):") }
     }
     
-    /// Generate with a Generable type for structured output
-    /// - Parameters:
-    ///   - transcript: The conversation transcript
-    ///   - type: The Generable type to use for structured output
-    ///   - options: Generation options
-    /// - Returns: The generated transcript entry with structured content
-    public func generate<T: Generable>(
-        transcript: Transcript,
-        generating type: T.Type,
-        options: GenerationOptions? = nil
-    ) async throws -> (entry: Transcript.Entry, content: T) {
-        // Get the schema from the Generable type
-        let schema = T.generationSchema
-        
-        // Generate with the schema
-        let entry = try await generate(transcript: transcript, schema: schema, options: options)
-        
-        // Parse the response content
-        guard case .response(let response) = entry else {
-            throw OllamaLanguageModelError.unexpectedResponse("Expected response entry, got \(entry)")
-        }
-        
-        // Extract the content and parse it
-        let content = extractTextFromSegments(response.segments)
-        let generatedContent = try GeneratedContent(json: content)
-        let parsedContent = try T(generatedContent)
-        
-        return (entry, parsedContent)
-    }
+    // MARK: - Private Helper Methods for Response Format
     
-    private func extractTextFromSegments(_ segments: [Transcript.Segment]) -> String {
-        var texts: [String] = []
-        
-        for segment in segments {
-            switch segment {
-            case .text(let textSegment):
-                texts.append(textSegment.content)
+    /// Add harmony response format to system message for gpt-oss models
+    private func addHarmonyResponseFormat(to messages: inout [Message], format: ResponseFormat) {
+        // Find system message and add Response Formats section
+        for i in 0..<messages.count {
+            if messages[i].role == .system {
+                let currentContent = messages[i].content
+                let harmonyFormat = generateHarmonyResponseFormat(format: format)
                 
-            case .structure(let structuredSegment):
-                // Convert structured content to string
-                if let jsonData = try? JSONEncoder().encode(structuredSegment.content),
-                   let jsonString = String(data: jsonData, encoding: .utf8) {
-                    texts.append(jsonString)
-                } else {
-                    texts.append("[GeneratedContent]")
-                }
+                // Add Response Formats section to system message
+                let newContent = currentContent + "\n\n" + harmonyFormat
+                
+                messages[i] = Message(
+                    role: .system,
+                    content: newContent,
+                    toolCalls: messages[i].toolCalls,
+                    thinking: messages[i].thinking,
+                    toolName: messages[i].toolName
+                )
+                return
             }
         }
         
-        return texts.joined(separator: " ")
+        // If no system message exists, create one with the harmony format
+        let harmonyFormat = generateHarmonyResponseFormat(format: format)
+        let systemMessage = Message(role: .system, content: harmonyFormat)
+        messages.insert(systemMessage, at: 0)
     }
     
-    // MARK: - Chat API with Tool Support
-    
-    /// Generate chat response with optional tool support
-    /// - Parameters:
-    ///   - messages: Array of chat messages
-    ///   - options: Generation options
-    ///   - tools: Optional array of tools for function calling
-    /// - Returns: Chat response with potential tool calls
-    public func chat(
-        messages: [Message],
-        options: GenerationOptions? = nil,
-        tools: [Tool]? = nil
-    ) async throws -> ChatResponse {
-        let request = ChatRequest(
-            model: modelName,
-            messages: messages,
-            stream: false,
-            options: options?.toOllamaOptions(),
-            keepAlive: configuration.keepAlive,
-            tools: tools
-        )
-        
-        return try await httpClient.send(request, to: "/api/chat")
+    /// Generate harmony response format string
+    private func generateHarmonyResponseFormat(format: ResponseFormat) -> String {
+        switch format {
+        case .jsonSchema(let schema):
+            var harmonyFormat = "# Response Formats\n\n## StructuredResponse\n\n"
+            
+            if let jsonData = try? JSONSerialization.data(withJSONObject: schema, options: []),
+               let schemaString = String(data: jsonData, encoding: .utf8) {
+                harmonyFormat += schemaString
+            } else {
+                // Fallback schema
+                harmonyFormat += #"{"type":"object","properties":{}}"#
+            }
+            
+            return harmonyFormat
+            
+        case .json:
+            // Simple JSON format for harmony
+            return """
+            # Response Formats
+            
+            ## JSONResponse
+            
+            {"type":"object","description":"JSON response format"}
+            """
+            
+        case .text:
+            return ""
+        }
     }
     
-    /// Stream chat response with optional tool support
-    /// - Parameters:
-    ///   - messages: Array of chat messages
-    ///   - options: Generation options
-    ///   - tools: Optional array of tools for function calling
-    /// - Returns: Async stream of chat responses
-    public func streamChat(
-        messages: [Message],
-        options: GenerationOptions? = nil,
-        tools: [Tool]? = nil
-    ) -> AsyncThrowingStream<ChatResponse, Error> {
-        AsyncThrowingStream<ChatResponse, Error> { continuation in
-            Task {
-                do {
-                    let request = ChatRequest(
-                        model: modelName,
-                        messages: messages,
-                        stream: true,
-                        options: options?.toOllamaOptions(),
-                        keepAlive: configuration.keepAlive,
-                        tools: tools
-                    )
+    /// Add format instructions for non-gpt-oss models
+    private func addFormatInstructions(to messages: inout [Message], format: ResponseFormat) {
+        // Find the last user message and append format-specific instruction
+        for i in (0..<messages.count).reversed() {
+            if messages[i].role == .user {
+                let content = messages[i].content
+                
+                // Check if instruction should be added
+                let shouldAddInstruction = switch format {
+                case .jsonSchema:
+                    // Always add schema instruction for JSON Schema
+                    !content.contains("You must respond with a JSON object that matches this exact schema")
+                case .json:
+                    // Only add simple instruction if JSON not already mentioned
+                    !content.lowercased().contains("json")
+                case .text:
+                    false
+                }
+                
+                if shouldAddInstruction {
+                    let instruction: String
                     
-                    let streamResponse: AsyncThrowingStream<ChatResponse, Error> = await httpClient.stream(request, to: "/api/chat")
-                    
-                    for try await chunk in streamResponse {
-                        continuation.yield(chunk)
+                    switch format {
+                    case .jsonSchema(let schema):
+                        // For JSON Schema, provide explicit schema instruction
+                        var schemaInstruction = "\n\nYou must respond with a JSON object that matches this exact schema:"
                         
-                        if chunk.done {
-                            continuation.finish()
-                            return
+                        if let jsonData = try? JSONSerialization.data(withJSONObject: schema, options: .prettyPrinted),
+                           let schemaString = String(data: jsonData, encoding: .utf8) {
+                            schemaInstruction += "\n\n```json\n\(schemaString)\n```"
                         }
+                        
+                        schemaInstruction += "\n\nProvide only the JSON response with no additional text or explanation."
+                        instruction = schemaInstruction
+                        
+                    case .json:
+                        // For simple JSON mode
+                        instruction = "\n\nPlease respond with valid JSON only, no additional text."
+                        
+                    case .text:
+                        // No special instruction for text format
+                        instruction = ""
                     }
                     
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
+                    if !instruction.isEmpty {
+                        messages[i] = Message(
+                            role: .user,
+                            content: content + instruction,
+                            toolCalls: messages[i].toolCalls,
+                            thinking: messages[i].thinking,
+                            toolName: messages[i].toolName
+                        )
+                    }
                 }
+                break
             }
         }
     }
-    
-    // MARK: - Model Information
-    
-    /// Check if model is available locally
-    public func isModelAvailable() async throws -> Bool {
-        let models = try await listModels()
-        return models.contains { $0.name == modelName || $0.name.hasPrefix("\(modelName):") }
-    }
-    
-    /// List available models
-    public func listModels() async throws -> [ModelInfo] {
-        let response: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-        return response.models.map { model in
-            ModelInfo(
-                name: model.name,
-                modifiedAt: model.modifiedAt,
-                size: model.size
-            )
-        }
-    }
 }
-
-// MARK: - Error Types
-public enum OllamaLanguageModelError: Error, LocalizedError {
-    case unexpectedResponse(String)
-    
-    public var errorDescription: String? {
-        switch self {
-        case .unexpectedResponse(let message):
-            return "Unexpected response: \(message)"
-        }
-    }
-}
-
-// MARK: - Model Info
-public struct ModelInfo: Sendable {
-    public let name: String
-    public let modifiedAt: Date
-    public let size: Int64
-}
-

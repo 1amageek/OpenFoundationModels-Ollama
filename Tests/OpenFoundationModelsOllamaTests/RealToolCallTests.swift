@@ -30,7 +30,7 @@ struct RealToolCallTests {
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         
@@ -92,7 +92,7 @@ struct RealToolCallTests {
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         
@@ -214,7 +214,7 @@ struct RealToolCallTests {
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         

@@ -9,6 +9,129 @@ internal struct TranscriptConverter {
     
     /// Build Ollama messages from Transcript
     static func buildMessages(from transcript: Transcript) -> [Message] {
+        // Try JSON-based extraction first for more complete information
+        if let messagesFromJSON = buildMessagesFromJSON(transcript) {
+            return messagesFromJSON
+        }
+        
+        // Fallback to entry-based extraction
+        return buildMessagesFromEntries(transcript)
+    }
+    
+    /// Build messages by encoding Transcript to JSON
+    private static func buildMessagesFromJSON(_ transcript: Transcript) -> [Message]? {
+        do {
+            // Encode transcript to JSON
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(transcript)
+            
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let entries = json["entries"] as? [[String: Any]] else {
+                return nil
+            }
+            
+            var messages: [Message] = []
+            
+            for entry in entries {
+                guard let type = entry["type"] as? String else { continue }
+                
+                switch type {
+                case "instructions":
+                    if let segments = entry["segments"] as? [[String: Any]] {
+                        let content = extractTextFromSegments(segments)
+                        if !content.isEmpty {
+                            messages.append(Message(role: .system, content: content))
+                        }
+                    }
+                    
+                case "prompt":
+                    if let segments = entry["segments"] as? [[String: Any]] {
+                        let content = extractTextFromSegments(segments)
+                        messages.append(Message(role: .user, content: content))
+                    }
+                    
+                case "response":
+                    if let segments = entry["segments"] as? [[String: Any]] {
+                        let content = extractTextFromSegments(segments)
+                        messages.append(Message(role: .assistant, content: content))
+                    }
+                    
+                case "toolCalls":
+                    if let toolCalls = entry["toolCalls"] as? [[String: Any]] {
+                        let ollamaToolCalls = extractToolCallsFromJSON(toolCalls)
+                        messages.append(Message(
+                            role: .assistant,
+                            content: "",
+                            toolCalls: ollamaToolCalls
+                        ))
+                    }
+                    
+                case "toolOutput":
+                    if let segments = entry["segments"] as? [[String: Any]],
+                       let toolName = entry["toolName"] as? String {
+                        let content = extractTextFromSegments(segments)
+                        messages.append(Message(
+                            role: .tool,
+                            content: content,
+                            toolName: toolName
+                        ))
+                    }
+                    
+                default:
+                    break
+                }
+            }
+            
+            return messages.isEmpty ? nil : messages
+        } catch {
+            return nil
+        }
+    }
+    
+    /// Extract text from JSON segments
+    private static func extractTextFromSegments(_ segments: [[String: Any]]) -> String {
+        var texts: [String] = []
+        
+        for segment in segments {
+            if let type = segment["type"] as? String, type == "text",
+               let content = segment["content"] as? String {
+                texts.append(content)
+            } else if let type = segment["type"] as? String, type == "structure",
+                      let content = segment["content"] {
+                // Handle structured content
+                if let jsonData = try? JSONSerialization.data(withJSONObject: content),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    texts.append(jsonString)
+                }
+            }
+        }
+        
+        return texts.joined(separator: " ")
+    }
+    
+    /// Extract tool calls from JSON
+    private static func extractToolCallsFromJSON(_ toolCalls: [[String: Any]]) -> [ToolCall] {
+        var ollamaToolCalls: [ToolCall] = []
+        
+        for toolCall in toolCalls {
+            if let toolName = toolCall["toolName"] as? String,
+               let arguments = toolCall["arguments"] as? [String: Any] {
+                ollamaToolCalls.append(
+                    ToolCall(
+                        function: ToolCall.FunctionCall(
+                            name: toolName,
+                            arguments: arguments
+                        )
+                    )
+                )
+            }
+        }
+        
+        return ollamaToolCalls
+    }
+    
+    /// Fallback: Build messages from entries directly
+    private static func buildMessagesFromEntries(_ transcript: Transcript) -> [Message] {
         var messages: [Message] = []
         
         for entry in transcript {
@@ -57,6 +180,12 @@ internal struct TranscriptConverter {
     
     /// Extract tool definitions from Transcript
     static func extractTools(from transcript: Transcript) -> [Tool]? {
+        // Try JSON-based extraction first
+        if let toolsFromJSON = extractToolsFromJSON(transcript) {
+            return toolsFromJSON
+        }
+        
+        // Fallback to entry-based extraction
         for entry in transcript {
             if case .instructions(let instructions) = entry,
                !instructions.toolDefinitions.isEmpty {
@@ -66,51 +195,110 @@ internal struct TranscriptConverter {
         return nil
     }
     
+    /// Extract tools by encoding Transcript to JSON
+    private static func extractToolsFromJSON(_ transcript: Transcript) -> [Tool]? {
+        do {
+            // Encode transcript to JSON
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(transcript)
+            
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let entries = json["entries"] as? [[String: Any]] else {
+                return nil
+            }
+            
+            // Look for instructions with toolDefinitions
+            for entry in entries {
+                if entry["type"] as? String == "instructions",
+                   let toolDefs = entry["toolDefinitions"] as? [[String: Any]],
+                   !toolDefs.isEmpty {
+                    
+                    var tools: [Tool] = []
+                    for toolDef in toolDefs {
+                        if let tool = extractToolFromJSON(toolDef) {
+                            tools.append(tool)
+                        }
+                    }
+                    return tools.isEmpty ? nil : tools
+                }
+            }
+            
+            return nil
+        } catch {
+            return nil
+        }
+    }
+    
+    /// Extract a single tool from JSON
+    private static func extractToolFromJSON(_ json: [String: Any]) -> Tool? {
+        guard let name = json["name"] as? String,
+              let description = json["description"] as? String else {
+            return nil
+        }
+        
+        // Extract parameters if available
+        let parameters: Tool.Function.Parameters
+        if let paramsJSON = json["parameters"] as? [String: Any] {
+            parameters = parseSchemaJSON(paramsJSON)
+        } else {
+            parameters = Tool.Function.Parameters(type: "object", properties: [:], required: [])
+        }
+        
+        return Tool(
+            type: "function",
+            function: Tool.Function(
+                name: name,
+                description: description,
+                parameters: parameters
+            )
+        )
+    }
+    
     // MARK: - Response Format Extraction
     
     /// Extract response format from the most recent prompt
     static func extractResponseFormat(from transcript: Transcript) -> ResponseFormat? {
-        // Look for the most recent prompt with a response format
-        for entry in transcript.reversed() {
-            if case .prompt(let prompt) = entry,
-               let _ = prompt.responseFormat {
-                // For now, we'll default to JSON format when a response format is specified
-                // In the future, we could parse the GenerationSchema to determine the format
-                return .json
-            }
-        }
-        return nil
+        return extractResponseFormatFromJSON(transcript)
     }
     
     /// Extract response format with full JSON Schema from the most recent prompt
-    /// This method encodes the ResponseFormat to extract the schema information
     static func extractResponseFormatWithSchema(from transcript: Transcript) -> ResponseFormat? {
-        // Look for the most recent prompt with response format
-        for entry in transcript.reversed() {
-            if case .prompt(let prompt) = entry {
-                return extractResponseFormatFromPrompt(prompt)
-            }
-        }
-        return nil
+        return extractResponseFormatFromJSON(transcript)
     }
     
-    /// Extract response format from a Prompt
-    /// Note: Due to OpenFoundationModels' ResponseFormatCoding implementation,
-    /// the schema is not included in the encoded JSON (set to nil).
-    /// This is a limitation in OpenFoundationModels/Sources/OpenFoundationModels/Transcript+Codable.swift
-    /// line 349: self.schema = nil
-    /// As a workaround, we detect ResponseFormat presence and return .json
-    static func extractResponseFormatFromPrompt(_ prompt: Transcript.Prompt) -> ResponseFormat? {
-        guard let _ = prompt.responseFormat else { return nil }
-        
-        // Unfortunately, we cannot extract the actual schema from ResponseFormat
-        // because OpenFoundationModels' Codable implementation doesn't encode it.
-        // The best we can do is detect that a ResponseFormat exists
-        // and enable JSON mode in Ollama.
-        
-        // Return .json to enable structured output mode in Ollama
-        // This will at least ensure the model returns valid JSON
-        return .json
+    /// Extract response format by encoding Transcript to JSON
+    private static func extractResponseFormatFromJSON(_ transcript: Transcript) -> ResponseFormat? {
+        do {
+            // Encode transcript to JSON
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(transcript)
+            
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let entries = json["entries"] as? [[String: Any]] else {
+                return nil
+            }
+            
+            // Look for the most recent prompt with responseFormat
+            for entry in entries.reversed() {
+                if entry["type"] as? String == "prompt",
+                   let responseFormat = entry["responseFormat"] as? [String: Any] {
+                    
+                    // Check if there's a schema (now available with updated OpenFoundationModels)
+                    if let schema = responseFormat["schema"] as? [String: Any] {
+                        return .jsonSchema(schema)
+                    }
+                    
+                    // If there's a name or type field, we know JSON is expected
+                    if responseFormat["name"] != nil || responseFormat["type"] != nil {
+                        return .json
+                    }
+                }
+            }
+            
+            return nil
+        } catch {
+            return nil
+        }
     }
     
     // MARK: - Generation Options Extraction
@@ -223,62 +411,6 @@ internal struct TranscriptConverter {
         )
     }
     
-    /// Convert GeneratedContent parameters to Tool.Function.Parameters (legacy)
-    private static func convertParameters(_ content: GeneratedContent?) -> Tool.Function.Parameters {
-        guard let content = content else {
-            return Tool.Function.Parameters(
-                type: "object",
-                properties: [:],
-                required: []
-            )
-        }
-        
-        var properties: [String: Tool.Function.Parameters.Property] = [:]
-        var required: [String] = []
-        
-        // Try to extract properties from GeneratedContent
-        if case .structure(let props, _) = content.kind {
-            for (key, value) in props {
-                let type = inferType(from: value)
-                properties[key] = Tool.Function.Parameters.Property(
-                    type: type,
-                    description: ""
-                )
-                
-                // Simple heuristic: non-null values are required
-                if case .null = value.kind {
-                    // Optional field
-                } else {
-                    required.append(key)
-                }
-            }
-        }
-        
-        return Tool.Function.Parameters(
-            type: "object",
-            properties: properties,
-            required: required
-        )
-    }
-    
-    /// Infer JSON type from GeneratedContent
-    private static func inferType(from content: GeneratedContent) -> String {
-        switch content.kind {
-        case .null:
-            return "null"
-        case .bool:
-            return "boolean"
-        case .number:
-            return "number"
-        case .string:
-            return "string"
-        case .array:
-            return "array"
-        case .structure:
-            return "object"
-        // Note: 'partial' case was removed from GeneratedContent.Kind in latest version
-        }
-    }
     
     /// Convert Transcript.ToolCalls to Ollama ToolCalls
     private static func convertToolCalls(_ toolCalls: Transcript.ToolCalls) -> [ToolCall] {

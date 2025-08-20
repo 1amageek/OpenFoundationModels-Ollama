@@ -104,7 +104,8 @@ struct GenerableToolTests {
         
         // The schema should have been generated
         // We can't access internal properties, but we can verify it exists
-        #expect(schema != nil)
+        // Schema is non-optional, so just verify it exists
+        _ = schema
         
         // Try to encode the schema to see its structure
         if let encoded = try? JSONEncoder().encode(schema),
@@ -125,9 +126,9 @@ struct GenerableToolTests {
         print("Generable tool has parameters: \(generableParams)")
         print("Manual tool has parameters: \(manualParams)")
         
-        // The generable tool should have auto-implemented parameters
-        #expect(generableParams != nil)
-        #expect(manualParams != nil)
+        // Parameters are non-optional, so just verify they exist
+        _ = generableParams
+        _ = manualParams
         
         // Extract tools for Ollama API
         let generableTranscript = Transcript(entries: [
@@ -211,7 +212,7 @@ struct GenerableToolTests {
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         

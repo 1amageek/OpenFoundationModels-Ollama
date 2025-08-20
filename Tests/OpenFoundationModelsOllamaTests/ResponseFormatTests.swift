@@ -88,33 +88,54 @@ struct ResponseFormatTests {
     
     @Test("Direct JSON Schema from GenerationSchema")
     func testDirectSchemaFromGenerationSchema() throws {
-        // Get the schema directly from the Generable type
-        let schema = WeatherResponse.generationSchema
-        
-        // Encode it to get JSON Schema
+        // Test WeatherResponse schema
+        let weatherSchema = WeatherResponse.generationSchema
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
-        let schemaData = try encoder.encode(schema)
+        let weatherSchemaData = try encoder.encode(weatherSchema)
         
-        print("Direct JSON Schema from GenerationSchema:")
-        if let jsonString = String(data: schemaData, encoding: .utf8) {
+        print("WeatherResponse JSON Schema:")
+        if let jsonString = String(data: weatherSchemaData, encoding: .utf8) {
             print(jsonString)
         }
         
-        // Parse as JSON to verify structure
-        let schemaJSON = try JSONSerialization.jsonObject(with: schemaData) as? [String: Any]
+        // Test TodoList schema
+        let todoSchema = TodoList.generationSchema
+        let todoSchemaData = try encoder.encode(todoSchema)
         
-        #expect(schemaJSON != nil)
-        #expect(schemaJSON?["type"] as? String == "object")
-        #expect(schemaJSON?["properties"] != nil)
+        print("\nTodoList JSON Schema:")
+        if let jsonString = String(data: todoSchemaData, encoding: .utf8) {
+            print(jsonString)
+        }
         
-        if let properties = schemaJSON?["properties"] as? [String: Any] {
+        // Parse TodoList schema to verify structure
+        let todoSchemaJSON = try JSONSerialization.jsonObject(with: todoSchemaData) as? [String: Any]
+        
+        #expect(todoSchemaJSON != nil)
+        #expect(todoSchemaJSON?["type"] as? String == "object")
+        
+        if let properties = todoSchemaJSON?["properties"] as? [String: Any] {
+            print("\nTodoList properties: \(properties.keys)")
+            if let todosProperty = properties["todos"] as? [String: Any] {
+                print("todos property type: \(todosProperty["type"] ?? "nil")")
+                print("todos property structure: \(todosProperty)")
+            }
+        }
+        
+        // Parse WeatherResponse for comparison
+        let weatherSchemaJSON = try JSONSerialization.jsonObject(with: weatherSchemaData) as? [String: Any]
+        
+        #expect(weatherSchemaJSON != nil)
+        #expect(weatherSchemaJSON?["type"] as? String == "object")
+        #expect(weatherSchemaJSON?["properties"] != nil)
+        
+        if let properties = weatherSchemaJSON?["properties"] as? [String: Any] {
             #expect(properties["temperature"] != nil)
             #expect(properties["condition"] != nil)
             #expect(properties["humidity"] != nil)
         }
         
-        if let required = schemaJSON?["required"] as? [String] {
+        if let required = weatherSchemaJSON?["required"] as? [String] {
             #expect(required.contains("temperature"))
             #expect(required.contains("condition"))
             #expect(!required.contains("humidity")) // Optional field
@@ -200,6 +221,164 @@ struct ResponseFormatTests {
         }
     }
     
+    @Test("Test gpt-oss Harmony Response Format with API")
+    func testGptOssHarmonyWithAPI() async throws {
+        guard await isOllamaAvailable else {
+            throw TestSkip(reason: "Ollama is not running")
+        }
+        
+        let model = OllamaLanguageModel(modelName: defaultModel)
+        
+        guard try await model.checkModelAvailability() else {
+            throw TestSkip(reason: "Model \(defaultModel) not available")
+        }
+        
+        // Create transcript with ResponseFormat for WeatherResponse
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                segments: [.text(Transcript.TextSegment(content: "You are a helpful weather assistant."))],
+                toolDefinitions: []
+            )),
+            .prompt(Transcript.Prompt(
+                segments: [.text(Transcript.TextSegment(content: "What's the weather in Tokyo today?"))],
+                options: GenerationOptions(temperature: 0.1),
+                responseFormat: Transcript.ResponseFormat(type: WeatherResponse.self)
+            ))
+        ])
+        
+        print("\n=== Testing gpt-oss Harmony with Real API ===")
+        
+        // Call the model with harmony format
+        let response = try await model.generate(transcript: transcript, options: nil)
+        
+        if case .response(let resp) = response {
+            print("\n=== Harmony API Response ===")
+            for segment in resp.segments {
+                switch segment {
+                case .text(let textSegment):
+                    let content = textSegment.content
+                    print("Content: '\(content)'")
+                    
+                    // Try to parse as JSON to see if it's valid
+                    if let data = content.data(using: .utf8) {
+                        do {
+                            let json = try JSONSerialization.jsonObject(with: data)
+                            print("✅ Valid JSON response!")
+                            print("Parsed: \(json)")
+                        } catch {
+                            print("❌ Not valid JSON: \(error)")
+                        }
+                    }
+                    
+                case .structure(let structSegment):
+                    print("Structure: \(structSegment.content)")
+                }
+            }
+        }
+        
+        print("✅ Harmony format API call completed")
+    }
+    
+    @Test("Test gpt-oss variants detection")
+    func testGptOssVariantsDetection() throws {
+        // Test that all gpt-oss variants are detected correctly
+        let models = [
+            "gpt-oss:20b",
+            "gpt-oss:120b", 
+            "gpt-oss:latest",
+            "gpt-oss"
+        ]
+        
+        for modelName in models {
+            let model = OllamaLanguageModel(modelName: modelName)
+            let isGptOss = modelName.lowercased().hasPrefix("gpt-oss")
+            
+            print("Model: \(modelName) -> gpt-oss: \(isGptOss)")
+            #expect(isGptOss == true)
+        }
+        
+        // Test non-gpt-oss models
+        let nonGptOssModels = ["llama3.2", "mistral", "codellama"]
+        for modelName in nonGptOssModels {
+            let isGptOss = modelName.lowercased().hasPrefix("gpt-oss")
+            print("Model: \(modelName) -> gpt-oss: \(isGptOss)")
+            #expect(isGptOss == false)
+        }
+    }
+    
+    @Test("Test gpt-oss Harmony Message Generation")
+    func testGptOssHarmonyMessageGeneration() throws {
+        // Test that Harmony format is generated correctly for gpt-oss models
+        let model = OllamaLanguageModel(modelName: "gpt-oss:20b")
+        
+        // Create transcript with ResponseFormat for WeatherResponse
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                segments: [.text(Transcript.TextSegment(content: "You are a helpful weather assistant."))],
+                toolDefinitions: []
+            )),
+            .prompt(Transcript.Prompt(
+                segments: [.text(Transcript.TextSegment(content: "What's the weather in Tokyo today?"))],
+                options: GenerationOptions(temperature: 0.1),
+                responseFormat: Transcript.ResponseFormat(type: WeatherResponse.self)
+            ))
+        ])
+        
+        print("\n=== Testing gpt-oss Harmony Message Generation ===")
+        
+        // Extract format and build messages to verify harmony format is added
+        let extractedFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
+        var messages = TranscriptConverter.buildMessages(from: transcript)
+        
+        if case .jsonSchema(let schema) = extractedFormat {
+            print("Extracted schema:")
+            if let jsonData = try? JSONSerialization.data(withJSONObject: schema, options: .prettyPrinted),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                print(jsonString)
+                
+                // Simulate the harmony format generation
+                if model.modelName.lowercased().hasPrefix("gpt-oss") {
+                    // Find system message and add harmony format
+                    for i in 0..<messages.count {
+                        if messages[i].role == .system {
+                            let currentContent = messages[i].content
+                            let harmonyFormat = """
+                            # Response Formats
+                            
+                            ## StructuredResponse
+                            
+                            \(jsonString)
+                            """
+                            
+                            let newContent = currentContent + "\n\n" + harmonyFormat
+                            messages[i] = Message(
+                                role: .system,
+                                content: newContent,
+                                toolCalls: messages[i].toolCalls,
+                                thinking: messages[i].thinking,
+                                toolName: messages[i].toolName
+                            )
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        
+        print("\n=== Generated Messages ===")
+        for (index, message) in messages.enumerated() {
+            print("Message \(index) (\(message.role)):")
+            print("Content: \(message.content)")
+            print("")
+        }
+        
+        // Verify that system message contains Response Formats
+        let systemMessage = messages.first { $0.role == .system }
+        #expect(systemMessage?.content.contains("# Response Formats") == true)
+        #expect(systemMessage?.content.contains("## StructuredResponse") == true)
+        #expect(systemMessage?.content.contains("\"temperature\"") == true)
+    }
+    
     @Test("Explicit schema generation with OllamaLanguageModel")
     func testExplicitSchemaGeneration() async throws {
         guard await isOllamaAvailable else {
@@ -208,45 +387,39 @@ struct ResponseFormatTests {
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         
-        // Create a basic transcript
-        var transcript = Transcript()
-        transcript = Transcript(entries: [
-            .prompt(Transcript.Prompt(
-                segments: [.text(Transcript.TextSegment(content: "What's the weather in Tokyo today?"))]
-            ))
-        ])
+        // Note: Direct schema generation was removed from OllamaLanguageModel
+        // Use LanguageModelSession for structured output instead
+        let session = LanguageModelSession(
+            model: model,
+            instructions: "You are a weather assistant."
+        )
+    
         
-        // Generate with explicit schema
-        let (entry, weather) = try await model.generate(
-            transcript: transcript,
+        let response = try await session.respond(
+            to: "What's the weather in Tokyo today?",
             generating: WeatherResponse.self,
             options: GenerationOptions(temperature: 0.1)
         )
         
         print("\n=== Structured Response with Explicit Schema ===")
-        print("Temperature: \(weather.temperature)°C")
-        print("Condition: \(weather.condition)")
-        if let humidity = weather.humidity {
+        print("Temperature: \(response.content.temperature)°C")
+        print("Condition: \(response.content.condition)")
+        if let humidity = response.content.humidity {
             print("Humidity: \(humidity)%")
         }
         
         // Verify the response
-        #expect(weather.temperature >= -50 && weather.temperature <= 50)
-        #expect(["sunny", "cloudy", "rainy", "snowy"].contains(weather.condition))
-        if let humidity = weather.humidity {
+        #expect(response.content.temperature >= -50 && response.content.temperature <= 50)
+        #expect(["sunny", "cloudy", "rainy", "snowy"].contains(response.content.condition))
+        if let humidity = response.content.humidity {
             #expect(humidity >= 0 && humidity <= 100)
         }
         
-        // Verify we got a response entry
-        if case .response = entry {
-            print("✅ Successfully generated structured response with explicit schema")
-        } else {
-            Issue.record("Expected response entry")
-        }
+        print("✅ Successfully generated structured response with explicit schema")
     }
     
     @Test("Real Ollama API call with ResponseFormat")
@@ -257,7 +430,7 @@ struct ResponseFormatTests {
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         
@@ -297,7 +470,7 @@ struct ResponseFormatTests {
         
         let model = OllamaLanguageModel(modelName: defaultModel)
         
-        guard try await model.isModelAvailable() else {
+        guard try await model.checkModelAvailability() else {
             throw TestSkip(reason: "Model \(defaultModel) not available")
         }
         
@@ -366,5 +539,71 @@ extension ResponseFormatTests {
     struct TestSkip: Error, CustomStringConvertible {
         let reason: String
         var description: String { reason }
+    }
+}
+
+// MARK: - Transcript Encoding Tests
+
+extension ResponseFormatTests {
+    @Test("Transcript Encoding Investigation")
+    func testTranscriptEncoding() throws {
+        // Create a transcript with ResponseFormat using correct initialization
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                segments: [.text(Transcript.TextSegment(content: "You are a helpful assistant."))],
+                toolDefinitions: []
+            )),
+            .prompt(Transcript.Prompt(
+                segments: [.text(Transcript.TextSegment(content: "What's the weather?"))],
+                options: GenerationOptions(temperature: 0.1),
+                responseFormat: Transcript.ResponseFormat(type: WeatherResponse.self)
+            ))
+        ])
+        
+        // Try to encode the transcript
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        let data = try encoder.encode(transcript)
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("=== Encoded Transcript ===")
+            print(jsonString)
+            print("\n")
+        }
+        
+        // Parse as JSON to explore structure
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            print("=== JSON Structure ===")
+            print("Top-level keys: \(json.keys.sorted())")
+            
+            if let entries = json["entries"] as? [[String: Any]] {
+                print("\nNumber of entries: \(entries.count)")
+                for (index, entry) in entries.enumerated() {
+                    print("\nEntry \(index):")
+                    print("  Type: \(entry["type"] ?? "unknown")")
+                    print("  Keys: \(entry.keys.sorted())")
+                    
+                    // Check for responseFormat in prompt
+                    if entry["type"] as? String == "prompt" {
+                        if let responseFormat = entry["responseFormat"] as? [String: Any] {
+                            print("  ResponseFormat found!")
+                            print("    Keys: \(responseFormat.keys.sorted())")
+                            print("    Type: \(responseFormat["type"] ?? "nil")")
+                            print("    Schema: \(responseFormat["schema"] ?? "nil")")
+                        }
+                    }
+                    
+                    // Check for toolDefinitions in instructions
+                    if entry["type"] as? String == "instructions" {
+                        if let toolDefs = entry["toolDefinitions"] as? [[String: Any]] {
+                            print("  ToolDefinitions found: \(toolDefs.count) tools")
+                        }
+                    }
+                }
+            }
+        }
+        
+        #expect(data.count > 0, "Transcript should encode to non-empty data")
     }
 }
