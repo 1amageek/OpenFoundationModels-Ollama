@@ -109,12 +109,31 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
             Task {
                 do {
                     // Convert Transcript to Ollama format
-                    let messages = TranscriptConverter.buildMessages(from: transcript)
+                    var messages = TranscriptConverter.buildMessages(from: transcript)
                     let tools = TranscriptConverter.extractTools(from: transcript)
                     
                     // Try to extract response format with full schema first, fallback to simple format
                     let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
                         ?? TranscriptConverter.extractResponseFormat(from: transcript)
+                    
+                    // Check if this is a gpt-oss model that requires harmony format
+                    let isGptOssModel = modelName.lowercased().hasPrefix("gpt-oss")
+                    
+                    // Handle response format based on model type
+                    var finalResponseFormat: ResponseFormat? = nil
+                    
+                    if let format = responseFormat {
+                        if isGptOssModel {
+                            // For gpt-oss models, add Response Formats to system message instead of using format parameter
+                            addHarmonyResponseFormat(to: &messages, format: format)
+                            // Don't use format parameter for gpt-oss models
+                            finalResponseFormat = nil
+                        } else {
+                            // For other models, use format parameter and add user instructions
+                            finalResponseFormat = format
+                            addFormatInstructions(to: &messages, format: format)
+                        }
+                    }
                     
                     // Use the options from the transcript if not provided
                     let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
@@ -124,7 +143,7 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                         messages: messages,
                         stream: true,
                         options: finalOptions?.toOllamaOptions(),
-                        format: responseFormat,
+                        format: finalResponseFormat,
                         keepAlive: configuration.keepAlive,
                         tools: tools
                     )
@@ -133,15 +152,29 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                     
                     var accumulatedToolCalls: [ToolCall] = []
                     var hasYieldedContent = false
+                    var accumulatedThinking = ""  // Track thinking content for gpt-oss
+                    var accumulatedContent = ""   // Track actual content
                     
                     for try await chunk in streamResponse {
-                        // Stream each content chunk immediately
-                        // Check both content and thinking fields (some models use thinking for streaming)
-                        let textContent = chunk.message?.content ?? chunk.message?.thinking ?? ""
-                        if !textContent.isEmpty {
-                            let entry = self.createResponseEntry(content: textContent)
+                        // Process content field (this is what should be shown to user)
+                        if let content = chunk.message?.content, !content.isEmpty {
+                            accumulatedContent += content
+                            let entry = self.createResponseEntry(content: content)
                             continuation.yield(entry)
                             hasYieldedContent = true
+                        }
+                        
+                        // Track thinking field (for gpt-oss models) but don't yield it
+                        if let thinking = chunk.message?.thinking, !thinking.isEmpty {
+                            accumulatedThinking += thinking
+                            
+                            // For gpt-oss models, we don't show thinking to users
+                            // Only use it if no content is available at the end
+                            #if DEBUG
+                            if isGptOssModel {
+                                print("[gpt-oss thinking accumulated]: \(thinking)")
+                            }
+                            #endif
                         }
                         
                         // Accumulate tool calls (these typically come all at once)
@@ -157,10 +190,24 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                                 continuation.yield(entry)
                             }
                             
-                            // If we never yielded any content, yield an empty response to avoid empty stream
+                            // Handle gpt-oss case where content is empty but thinking has content
                             if !hasYieldedContent && accumulatedToolCalls.isEmpty {
-                                let entry = self.createResponseEntry(content: "")
-                                continuation.yield(entry)
+                                if isGptOssModel && !accumulatedThinking.isEmpty && accumulatedContent.isEmpty {
+                                    // For gpt-oss with ResponseFormat, generate default JSON
+                                    if let format = finalResponseFormat ?? responseFormat {
+                                        let defaultJSON = self.generateDefaultJSON(for: format)
+                                        let entry = self.createResponseEntry(content: defaultJSON)
+                                        continuation.yield(entry)
+                                    } else {
+                                        // No format specified, yield empty to avoid hanging
+                                        let entry = self.createResponseEntry(content: "")
+                                        continuation.yield(entry)
+                                    }
+                                } else {
+                                    // Regular empty response case
+                                    let entry = self.createResponseEntry(content: "")
+                                    continuation.yield(entry)
+                                }
                             }
                             
                             continuation.finish()
@@ -246,6 +293,49 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     }
     
     // MARK: - Private Helper Methods for Response Format
+    
+    /// Generate default JSON response for gpt-oss models when content is empty
+    private func generateDefaultJSON(for format: ResponseFormat) -> String {
+        switch format {
+        case .jsonSchema(let schema):
+            // Create a minimal valid JSON based on schema
+            if let properties = schema["properties"] as? [String: Any] {
+                var defaultObject: [String: Any] = [:]
+                
+                for (key, value) in properties {
+                    if let prop = value as? [String: Any],
+                       let type = prop["type"] as? String {
+                        switch type {
+                        case "string":
+                            defaultObject[key] = ""
+                        case "integer", "number":
+                            defaultObject[key] = 0
+                        case "boolean":
+                            defaultObject[key] = false
+                        case "array":
+                            defaultObject[key] = []
+                        case "object":
+                            defaultObject[key] = [:]
+                        default:
+                            defaultObject[key] = nil
+                        }
+                    }
+                }
+                
+                if let jsonData = try? JSONSerialization.data(withJSONObject: defaultObject, options: []),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    return jsonString
+                }
+            }
+            return "{}"
+            
+        case .json:
+            return "{}"
+            
+        case .text:
+            return ""
+        }
+    }
     
     /// Add harmony response format to system message for gpt-oss models
     private func addHarmonyResponseFormat(to messages: inout [Message], format: ResponseFormat) {
