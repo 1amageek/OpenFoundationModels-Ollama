@@ -10,11 +10,11 @@ internal struct TranscriptConverter {
     /// Build Ollama messages from Transcript
     static func buildMessages(from transcript: Transcript) -> [Message] {
         // Try JSON-based extraction first for more complete information
-        if let messagesFromJSON = buildMessagesFromJSON(transcript) {
+        if let messagesFromJSON = buildMessagesFromJSON(transcript), !messagesFromJSON.isEmpty {
             return messagesFromJSON
         }
         
-        // Fallback to entry-based extraction
+        // Fallback to entry-based extraction if JSON fails
         return buildMessagesFromEntries(transcript)
     }
     
@@ -24,6 +24,7 @@ internal struct TranscriptConverter {
             // Encode transcript to JSON
             let encoder = JSONEncoder()
             let data = try encoder.encode(transcript)
+            
             
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let entries = json["entries"] as? [[String: Any]] else {
@@ -57,13 +58,37 @@ internal struct TranscriptConverter {
                     }
                     
                 case "toolCalls":
-                    if let toolCalls = entry["toolCalls"] as? [[String: Any]] {
+                    // Handle different possible JSON structures for toolCalls
+                    var toolCallsArray: [[String: Any]]? = nil
+                    
+                    // Try different key names
+                    if let directArray = entry["toolCalls"] as? [[String: Any]] {
+                        toolCallsArray = directArray
+                    } else if let callsArray = entry["calls"] as? [[String: Any]] {
+                        // Actual key name in Transcript.ToolCalls is "calls"
+                        toolCallsArray = callsArray
+                    }
+                    // Try as nested structure (look for any array field)
+                    else {
+                        // Iterate through entry to find array of tool calls
+                        for (key, value) in entry {
+                            if key != "type" && key != "id", // Skip metadata fields
+                               let array = value as? [[String: Any]] {
+                                toolCallsArray = array
+                                break
+                            }
+                        }
+                    }
+                    
+                    if let toolCalls = toolCallsArray, !toolCalls.isEmpty {
                         let ollamaToolCalls = extractToolCallsFromJSON(toolCalls)
-                        messages.append(Message(
-                            role: .assistant,
-                            content: "",
-                            toolCalls: ollamaToolCalls
-                        ))
+                        if !ollamaToolCalls.isEmpty {
+                            messages.append(Message(
+                                role: .assistant,
+                                content: "",
+                                toolCalls: ollamaToolCalls
+                            ))
+                        }
                     }
                     
                 case "toolOutput":
@@ -114,20 +139,73 @@ internal struct TranscriptConverter {
         var ollamaToolCalls: [ToolCall] = []
         
         for toolCall in toolCalls {
-            if let toolName = toolCall["toolName"] as? String,
-               let arguments = toolCall["arguments"] as? [String: Any] {
-                ollamaToolCalls.append(
-                    ToolCall(
-                        function: ToolCall.FunctionCall(
-                            name: toolName,
-                            arguments: arguments
-                        )
+            guard let toolName = toolCall["toolName"] as? String else { continue }
+            
+            var extractedArguments: [String: Any] = [:]
+            
+            // Try to extract arguments from different possible structures
+            if let directArgs = toolCall["arguments"] as? [String: Any] {
+                // Direct arguments structure - this is the most common case
+                extractedArguments = directArgs
+            } else if let argumentsWrapper = toolCall["arguments"] as? [String: Any] {
+                // Try to extract from GeneratedContent structure
+                if let kind = argumentsWrapper["kind"] as? [String: Any] {
+                    if let structure = kind["structure"] as? [String: Any],
+                       let properties = structure["properties"] as? [String: Any] {
+                        // Extract properties from structure
+                        extractedArguments = extractArgumentsFromProperties(properties)
+                    } else if let properties = kind["properties"] as? [String: Any] {
+                        // Direct properties in kind
+                        extractedArguments = extractArgumentsFromProperties(properties)
+                    }
+                }
+            }
+            
+            // Create tool call even if arguments are empty (some tools don't require arguments)
+            ollamaToolCalls.append(
+                ToolCall(
+                    function: ToolCall.FunctionCall(
+                        name: toolName,
+                        arguments: extractedArguments
                     )
                 )
-            }
+            )
         }
         
         return ollamaToolCalls
+    }
+    
+    /// Extract arguments from GeneratedContent properties structure
+    private static func extractArgumentsFromProperties(_ properties: [String: Any]) -> [String: Any] {
+        var arguments: [String: Any] = [:]
+        
+        for (key, value) in properties {
+            if let contentWrapper = value as? [String: Any] {
+                // Try to extract the actual value from GeneratedContent structure
+                if let kind = contentWrapper["kind"] as? [String: Any] {
+                    if let stringValue = kind["string"] as? String {
+                        arguments[key] = stringValue
+                    } else if let numberValue = kind["number"] as? Double {
+                        arguments[key] = numberValue
+                    } else if let boolValue = kind["boolean"] as? Bool {
+                        arguments[key] = boolValue
+                    } else if let structure = kind["structure"] as? [String: Any] {
+                        arguments[key] = structure
+                    }
+                } else if let kind = contentWrapper["kind"] as? String {
+                    // Simple kind string
+                    arguments[key] = kind
+                } else {
+                    // Use as-is if we can't parse it
+                    arguments[key] = value
+                }
+            } else {
+                // Direct value
+                arguments[key] = value
+            }
+        }
+        
+        return arguments
     }
     
     /// Fallback: Build messages from entries directly
