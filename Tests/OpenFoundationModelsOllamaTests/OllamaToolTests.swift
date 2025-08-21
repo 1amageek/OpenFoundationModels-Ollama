@@ -539,6 +539,8 @@ struct OllamaToolTests {
             }
         }
         
+        // Verify that the tool was called with the expected parameter
+        #expect(toolCalledWithDetails, "Tool should have been called with includeDetails=true")
         #expect(!response.content.isEmpty)
     }
     

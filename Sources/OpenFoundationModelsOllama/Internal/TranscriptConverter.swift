@@ -136,19 +136,61 @@ internal struct TranscriptConverter {
     
     /// Extract tool calls from JSON
     private static func extractToolCallsFromJSON(_ toolCalls: [[String: Any]]) -> [ToolCall] {
+        print("\n📋 ===== EXTRACT TOOL CALLS FROM JSON START =====")
+        print("Number of tool calls: \(toolCalls.count)")
+        print("Tool calls JSON: \(toolCalls)")
         var ollamaToolCalls: [ToolCall] = []
         
-        for toolCall in toolCalls {
-            guard let toolName = toolCall["toolName"] as? String else { continue }
+        for (index, toolCall) in toolCalls.enumerated() {
+            print("\n--- Processing tool call \(index + 1) ---")
+            print("Tool call data: \(toolCall)")
+            print("Tool call keys: \(toolCall.keys)")
             
-            var extractedArguments: [String: Any] = [:]
+            guard let toolName = toolCall["toolName"] as? String else {
+                print("❌ No toolName found in tool call")
+                continue
+            }
+            print("Tool name: \(toolName)")
             
-            // Try to extract arguments from different possible structures
-            if let directArgs = toolCall["arguments"] as? [String: Any] {
-                // Direct arguments structure - this is the most common case
+            // Extract arguments using GeneratedContent(json:)
+            let extractedArguments: [String: Any]
+            
+            print("\n🔍 Extracting arguments...")
+            print("Arguments raw value: \(String(describing: toolCall["arguments"]))")
+            print("Arguments type: \(type(of: toolCall["arguments"]))")
+            
+            // Convert arguments to GeneratedContent, then to dictionary
+            if let argumentsData = toolCall["arguments"] {
+                do {
+                    // Convert to JSON string
+                    print("Converting arguments to JSON string...")
+                    let jsonData = try JSONSerialization.data(withJSONObject: argumentsData, options: [.sortedKeys])
+                    let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
+                    print("JSON string: \(jsonString)")
+                    
+                    // Create GeneratedContent from JSON
+                    print("Creating GeneratedContent from JSON...")
+                    let argumentsContent = try GeneratedContent(json: jsonString)
+                    print("✅ GeneratedContent created: \(argumentsContent.debugDescription)")
+                    
+                    // Print internal structure
+                    debugPrintGeneratedContent(argumentsContent, indent: "    ")
+                    
+                    // Convert GeneratedContent to dictionary for Ollama
+                    extractedArguments = convertGeneratedContentToDict(argumentsContent)
+                    print("Extracted arguments dictionary: \(extractedArguments)")
+                    
+                } catch {
+                    print("❌ Failed to process arguments: \(error)")
+                    extractedArguments = [:]
+                }
+            } else if let directArgs = toolCall["arguments"] as? [String: Any] {
+                // Fallback: Direct arguments structure
+                print("Using direct arguments (fallback)")
                 extractedArguments = directArgs
             } else if let argumentsWrapper = toolCall["arguments"] as? [String: Any] {
-                // Try to extract from GeneratedContent structure
+                // Try to extract from GeneratedContent structure (legacy path)
+                print("Attempting legacy extraction from wrapper")
                 if let kind = argumentsWrapper["kind"] as? [String: Any] {
                     if let structure = kind["structure"] as? [String: Any],
                        let properties = structure["properties"] as? [String: Any] {
@@ -157,53 +199,91 @@ internal struct TranscriptConverter {
                     } else if let properties = kind["properties"] as? [String: Any] {
                         // Direct properties in kind
                         extractedArguments = extractArgumentsFromProperties(properties)
+                    } else {
+                        extractedArguments = [:]
                     }
+                } else {
+                    extractedArguments = [:]
                 }
+            } else {
+                print("❌ No arguments found")
+                extractedArguments = [:]
             }
             
             // Create tool call even if arguments are empty (some tools don't require arguments)
-            ollamaToolCalls.append(
-                ToolCall(
-                    function: ToolCall.FunctionCall(
-                        name: toolName,
-                        arguments: extractedArguments
-                    )
+            print("\n📦 Creating ToolCall:")
+            print("  Name: \(toolName)")
+            print("  Final arguments: \(extractedArguments)")
+            print("  Arguments count: \(extractedArguments.count)")
+            
+            let toolCall = ToolCall(
+                function: ToolCall.FunctionCall(
+                    name: toolName,
+                    arguments: extractedArguments
                 )
             )
+            
+            ollamaToolCalls.append(toolCall)
+            print("✅ ToolCall created")
         }
+        
+        print("\n===== EXTRACT TOOL CALLS FROM JSON END =====")
+        print("Total Ollama tool calls created: \(ollamaToolCalls.count)\n")
         
         return ollamaToolCalls
     }
     
     /// Extract arguments from GeneratedContent properties structure
     private static func extractArgumentsFromProperties(_ properties: [String: Any]) -> [String: Any] {
+        print("\n🔍 Extracting arguments from properties (legacy)...")
+        print("Properties: \(properties)")
+        print("Properties count: \(properties.count)")
         var arguments: [String: Any] = [:]
         
         for (key, value) in properties {
+            print("\nProcessing property: \(key)")
+            print("Value: \(value)")
+            print("Value type: \(type(of: value))")
             if let contentWrapper = value as? [String: Any] {
+                print("Found content wrapper for key '\(key)': \(contentWrapper)")
+                
                 // Try to extract the actual value from GeneratedContent structure
                 if let kind = contentWrapper["kind"] as? [String: Any] {
+                    print("Found kind dict: \(kind)")
                     if let stringValue = kind["string"] as? String {
+                        print("✅ Extracted string: \(stringValue)")
                         arguments[key] = stringValue
                     } else if let numberValue = kind["number"] as? Double {
+                        print("✅ Extracted number: \(numberValue)")
                         arguments[key] = numberValue
                     } else if let boolValue = kind["boolean"] as? Bool {
+                        print("✅ Extracted boolean: \(boolValue)")
                         arguments[key] = boolValue
                     } else if let structure = kind["structure"] as? [String: Any] {
+                        print("✅ Extracted structure: \(structure)")
                         arguments[key] = structure
+                    } else {
+                        print("⚠️ Unknown kind structure: \(kind)")
                     }
                 } else if let kind = contentWrapper["kind"] as? String {
+                    print("Found kind string: \(kind)")
                     // Simple kind string
                     arguments[key] = kind
+                    print("✅ Using kind string as value")
                 } else {
+                    print("⚠️ No kind found, using value as-is")
                     // Use as-is if we can't parse it
                     arguments[key] = value
                 }
             } else {
+                print("Direct value (not wrapped): \(value)")
                 // Direct value
                 arguments[key] = value
             }
         }
+        
+        print("\nFinal extracted arguments: \(arguments)")
+        print("Arguments count: \(arguments.count)")
         
         return arguments
     }
@@ -393,6 +473,55 @@ internal struct TranscriptConverter {
     
     // MARK: - Private Helper Methods
     
+    /// Debug print GeneratedContent structure recursively
+    private static func debugPrintGeneratedContent(_ content: GeneratedContent, indent: String = "") {
+        print("\(indent)📊 GeneratedContent Debug:")
+        print("\(indent)  debugDescription: \(content.debugDescription)")
+        
+        switch content.kind {
+        case .structure(let properties, let orderedKeys):
+            print("\(indent)  Type: structure")
+            print("\(indent)  Properties count: \(properties.count)")
+            print("\(indent)  Ordered keys: \(orderedKeys)")
+            for (key, value) in properties {
+                print("\(indent)  Property '\(key)':")
+                switch value.kind {
+                case .string(let s):
+                    print("\(indent)    → String: '\(s)'")
+                case .number(let n):
+                    print("\(indent)    → Number: \(n)")
+                case .bool(let b):
+                    print("\(indent)    → Bool: \(b)")
+                case .structure(_, _):
+                    print("\(indent)    → Nested structure:")
+                    debugPrintGeneratedContent(value, indent: indent + "      ")
+                case .array(let arr):
+                    print("\(indent)    → Array with \(arr.count) elements")
+                case .null:
+                    print("\(indent)    → Null")
+                }
+            }
+        case .string(let s):
+            print("\(indent)  Type: string")
+            print("\(indent)  Value: '\(s)'")
+        case .number(let n):
+            print("\(indent)  Type: number")
+            print("\(indent)  Value: \(n)")
+        case .bool(let b):
+            print("\(indent)  Type: bool")
+            print("\(indent)  Value: \(b)")
+        case .array(let arr):
+            print("\(indent)  Type: array")
+            print("\(indent)  Elements: \(arr.count)")
+            for (i, elem) in arr.enumerated() {
+                print("\(indent)  Element \(i):")
+                debugPrintGeneratedContent(elem, indent: indent + "    ")
+            }
+        case .null:
+            print("\(indent)  Type: null")
+        }
+    }
+    
     /// Extract text from segments
     private static func extractText(from segments: [Transcript.Segment]) -> String {
         var texts: [String] = []
@@ -492,35 +621,62 @@ internal struct TranscriptConverter {
     
     /// Convert Transcript.ToolCalls to Ollama ToolCalls
     private static func convertToolCalls(_ toolCalls: Transcript.ToolCalls) -> [ToolCall] {
+        print("\n🔄 ===== CONVERT TOOL CALLS START =====")
+        print("Converting Transcript.ToolCalls to Ollama ToolCalls")
+        
         // Access the calls through the Collection protocol
         var ollamaToolCalls: [ToolCall] = []
         
-        for toolCall in toolCalls {
+        for (index, toolCall) in toolCalls.enumerated() {
+            print("\nProcessing tool call \(index + 1)")
+            print("Tool name: \(toolCall.toolName)")
+            print("Tool arguments: \(toolCall.arguments)")
+            print("Arguments debugDescription: \(toolCall.arguments.debugDescription)")
+            
             let argumentsDict = convertGeneratedContentToDict(toolCall.arguments)
-            ollamaToolCalls.append(
-                ToolCall(
-                    function: ToolCall.FunctionCall(
-                        name: toolCall.toolName,
-                        arguments: argumentsDict
-                    )
+            print("Converted arguments to dict: \(argumentsDict)")
+            
+            let ollamaToolCall = ToolCall(
+                function: ToolCall.FunctionCall(
+                    name: toolCall.toolName,
+                    arguments: argumentsDict
                 )
             )
+            
+            print("Created Ollama ToolCall")
+            ollamaToolCalls.append(ollamaToolCall)
         }
+        
+        print("\n===== CONVERT TOOL CALLS END =====")
+        print("Total converted: \(ollamaToolCalls.count)\n")
         
         return ollamaToolCalls
     }
     
     /// Convert GeneratedContent to dictionary for tool arguments
     private static func convertGeneratedContentToDict(_ content: GeneratedContent) -> [String: Any] {
+        print("\n📦 Converting GeneratedContent to dictionary...")
+        print("GeneratedContent: \(content.debugDescription)")
+        print("Content kind: \(content.kind)")
+        
         switch content.kind {
-        case .structure(let properties, _):
+        case .structure(let properties, let orderedKeys):
+            print("Found structure with \(properties.count) properties")
+            print("Ordered keys: \(orderedKeys)")
             var dict: [String: Any] = [:]
             for (key, value) in properties {
-                dict[key] = convertGeneratedContentToAny(value)
+                print("  Converting property '\(key)'...")
+                print("    Value: \(value.debugDescription)")
+                let converted = convertGeneratedContentToAny(value)
+                print("    Converted to: \(converted) (type: \(type(of: converted)))")
+                dict[key] = converted
             }
+            print("Final dictionary: \(dict)")
             return dict
             
         default:
+            print("⚠️ Content is not a structure, returning empty dictionary")
+            print("Content kind was: \(content.kind)")
             // If not a structure, return empty dictionary
             return [:]
         }
