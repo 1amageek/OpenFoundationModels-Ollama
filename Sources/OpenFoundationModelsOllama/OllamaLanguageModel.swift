@@ -242,16 +242,34 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
         let transcriptToolCalls = toolCalls.map { toolCall in
             // Convert Ollama tool call to Transcript tool call
             let argumentsDict = toolCall.function.arguments.dictionary
-            let jsonData = (try? JSONSerialization.data(withJSONObject: argumentsDict)) ?? Data()
-            let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
             
-            // Create GeneratedContent from JSON string, or use null if parsing fails
+            // Create GeneratedContent from arguments dictionary
             let argumentsContent: GeneratedContent
-            if let content = try? GeneratedContent(json: jsonString) {
-                argumentsContent = content
-            } else {
-                // Fallback to null GeneratedContent
-                argumentsContent = GeneratedContent(properties: [:])
+            
+            // Create GeneratedContent from arguments dictionary
+            do {
+                // Convert dictionary to JSON string
+                let jsonData = try JSONSerialization.data(withJSONObject: argumentsDict, options: [.sortedKeys])
+                let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
+                
+                #if DEBUG
+                print("📋 Tool '\(toolCall.function.name)' arguments: \(jsonString)")
+                #endif
+                
+                // Create GeneratedContent from JSON
+                argumentsContent = try GeneratedContent(json: jsonString)
+                
+                #if DEBUG
+                print("✅ Successfully created GeneratedContent for tool '\(toolCall.function.name)'")
+                #endif
+            } catch {
+                #if DEBUG
+                print("⚠️ Failed to create GeneratedContent for tool '\(toolCall.function.name)': \(error)")
+                print("  Arguments dictionary: \(argumentsDict)")
+                print("  Using empty GeneratedContent as fallback")
+                #endif
+                // Fallback to empty content
+                argumentsContent = try! GeneratedContent(json: "{}")
             }
             
             return Transcript.ToolCall(

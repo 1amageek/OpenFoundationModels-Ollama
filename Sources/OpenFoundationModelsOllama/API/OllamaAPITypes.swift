@@ -285,10 +285,35 @@ public struct ArgumentsContainer: Codable, Sendable {
     }
     
     public var dictionary: [String: Any] {
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            return json
+        // Handle empty data case
+        if data.isEmpty {
+            #if DEBUG
+            print("⚠️ ArgumentsContainer has empty data")
+            #endif
+            return [:]
         }
-        return [:]
+        
+        do {
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return json
+            } else {
+                #if DEBUG
+                print("⚠️ ArgumentsContainer data is not a valid dictionary")
+                if let jsonString = String(data: data, encoding: .utf8) {
+                    print("  Raw data: \(jsonString)")
+                }
+                #endif
+                return [:]
+            }
+        } catch {
+            #if DEBUG
+            print("⚠️ Failed to deserialize ArgumentsContainer data: \(error)")
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("  Raw data: \(jsonString)")
+            }
+            #endif
+            return [:]
+        }
     }
     
     public init(from decoder: Decoder) throws {
