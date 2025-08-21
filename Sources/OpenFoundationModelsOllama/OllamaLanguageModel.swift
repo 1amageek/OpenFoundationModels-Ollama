@@ -112,6 +112,7 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                     var messages = TranscriptConverter.buildMessages(from: transcript)
                     let tools = TranscriptConverter.extractTools(from: transcript)
                     
+                    
                     // Try to extract response format with full schema first, fallback to simple format
                     let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
                         ?? TranscriptConverter.extractResponseFormat(from: transcript)
@@ -167,14 +168,6 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                         // Track thinking field (for gpt-oss models) but don't yield it
                         if let thinking = chunk.message?.thinking, !thinking.isEmpty {
                             accumulatedThinking += thinking
-                            
-                            // For gpt-oss models, we don't show thinking to users
-                            // Only use it if no content is available at the end
-                            #if DEBUG
-                            if isGptOssModel {
-                                print("[gpt-oss thinking accumulated]: \(thinking)")
-                            }
-                            #endif
                         }
                         
                         // Accumulate tool calls (these typically come all at once)
@@ -184,6 +177,14 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                         
                         // Check if streaming is complete
                         if chunk.done {
+                            
+                            // For gpt-oss models, we don't show thinking to users
+                            // Only use it if no content is available at the end
+                            #if DEBUG
+                            if isGptOssModel {
+                                print("[thinking]: \(accumulatedThinking)")
+                            }
+                            #endif
                             // If we accumulated tool calls, yield them
                             if !accumulatedToolCalls.isEmpty {
                                 let entry = self.createToolCallsEntry(from: accumulatedToolCalls)
@@ -240,17 +241,8 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     /// Create tool calls entry from Ollama tool calls
     internal func createToolCallsEntry(from toolCalls: [ToolCall]) -> Transcript.Entry {
         let transcriptToolCalls = toolCalls.map { toolCall in
-            print("\n🔧 ===== TOOL CALL CREATION START =====")
-            print("Tool name: \(toolCall.function.name)")
-            print("Raw arguments: \(toolCall.function.arguments)")
-            print("Arguments type: \(type(of: toolCall.function.arguments))")
-            
             // Convert Ollama tool call to Transcript tool call
             let argumentsDict = toolCall.function.arguments.dictionary
-            print("Arguments dictionary: \(argumentsDict)")
-            print("Dictionary type: \(type(of: argumentsDict))")
-            print("Dictionary keys: \(argumentsDict.keys)")
-            print("Dictionary values: \(argumentsDict.values)")
             
             // Create GeneratedContent from arguments dictionary
             let argumentsContent: GeneratedContent
@@ -258,80 +250,16 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
             // Create GeneratedContent from arguments dictionary
             do {
                 // Convert dictionary to JSON string
-                print("Converting dictionary to JSON...")
                 let jsonData = try JSONSerialization.data(withJSONObject: argumentsDict, options: [.sortedKeys])
-                print("JSON data created: \(jsonData.count) bytes")
-                
                 let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
-                print("JSON string: \(jsonString)")
-                print("JSON string length: \(jsonString.count)")
                 
                 // Create GeneratedContent from JSON
-                print("Creating GeneratedContent...")
                 argumentsContent = try GeneratedContent(json: jsonString)
-                print("✅ GeneratedContent created successfully")
-                print("GeneratedContent: \(argumentsContent)")
-                print("GeneratedContent.debugDescription: \(argumentsContent.debugDescription)")
                 
-                // Print GeneratedContent internal structure
-                print("\n📊 GeneratedContent Internal Structure:")
-                switch argumentsContent.kind {
-                case .structure(let properties, let orderedKeys):
-                    print("  Type: structure")
-                    print("  Properties count: \(properties.count)")
-                    print("  Ordered keys: \(orderedKeys)")
-                    for (key, value) in properties {
-                        print("    Property '\(key)':")
-                        print("      Value: \(value)")
-                        print("      Value kind: \(value.kind)")
-                        switch value.kind {
-                        case .string(let s):
-                            print("      String value: '\(s)'")
-                        case .number(let n):
-                            print("      Number value: \(n)")
-                        case .bool(let b):
-                            print("      Bool value: \(b)")
-                        case .structure(let props, _):
-                            print("      Nested structure with \(props.count) properties")
-                        case .array(let arr):
-                            print("      Array with \(arr.count) elements")
-                        case .null:
-                            print("      Null value")
-                        }
-                    }
-                case .array(let elements):
-                    print("  Type: array")
-                    print("  Elements count: \(elements.count)")
-                case .string(let s):
-                    print("  Type: string")
-                    print("  Value: '\(s)'")
-                case .number(let n):
-                    print("  Type: number")
-                    print("  Value: \(n)")
-                case .bool(let b):
-                    print("  Type: bool")
-                    print("  Value: \(b)")
-                case .null:
-                    print("  Type: null")
-                }
-                
-                // Try to print the actual content as JSON
-                if let contentData = try? JSONEncoder().encode(argumentsContent),
-                   let contentString = String(data: contentData, encoding: .utf8) {
-                    print("\nGeneratedContent as JSON: \(contentString)")
-                }
                 
             } catch {
-                print("❌ Failed to create GeneratedContent")
-                print("Error: \(error)")
-                print("Error type: \(type(of: error))")
-                print("Full error: \(String(describing: error))")
-                print("Arguments dictionary was: \(argumentsDict)")
-                print("Using empty GeneratedContent as fallback")
-                
                 // Fallback to empty content
                 argumentsContent = try! GeneratedContent(json: "{}")
-                print("Fallback GeneratedContent created")
             }
             
             let toolCall = Transcript.ToolCall(
@@ -339,13 +267,6 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                 toolName: toolCall.function.name,
                 arguments: argumentsContent
             )
-            
-            print("\n📦 Created Transcript.ToolCall:")
-            print("  ID: \(toolCall.id)")
-            print("  Name: \(toolCall.toolName)")
-            print("  Arguments: \(toolCall.arguments)")
-            print("  Arguments.debugDescription: \(toolCall.arguments.debugDescription)")
-            print("===== TOOL CALL CREATION END =====\n")
             
             return toolCall
         }

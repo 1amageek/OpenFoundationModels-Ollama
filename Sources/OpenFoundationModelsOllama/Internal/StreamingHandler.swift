@@ -13,10 +13,6 @@ internal struct StreamingHandler: Sendable {
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
-            // Log the error for debugging
-            if let jsonString = String(data: data, encoding: .utf8) {
-                print("Failed to decode JSON: \(jsonString)")
-            }
             throw StreamingError.decodingError(error)
         }
     }
@@ -50,10 +46,7 @@ internal actor AdvancedStreamingHandler {
                 let object = try decoder.decode(T.self, from: lineData)
                 results.append(object)
             } catch {
-                // Log but don't fail on individual line errors
-                if let jsonString = String(data: lineData, encoding: .utf8) {
-                    print("Failed to decode line: \(jsonString), error: \(error)")
-                }
+                // Skip malformed lines silently
             }
         }
         

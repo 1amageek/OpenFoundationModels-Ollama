@@ -169,7 +169,7 @@ public actor OllamaHTTPClient {
                             let response = try decoder.decode(Response.self, from: buffer)
                             continuation.yield(response)
                         } catch {
-                            print("Failed to decode final buffer: \(error)")
+                            // Silently ignore any incomplete final buffer
                         }
                     }
                     
