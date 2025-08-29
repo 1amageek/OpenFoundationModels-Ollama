@@ -109,7 +109,14 @@ struct ResponseFormatTests {
                 
                 // Verify humidity field (optional)
                 if let humidProp = properties["humidity"] as? [String: Any] {
-                    #expect(humidProp["type"] as? String == "integer")
+                    if let typeArray = humidProp["type"] as? [String] {
+                        #expect(typeArray.contains("integer"))
+                        #expect(typeArray.contains("null"))
+                    } else if let typeString = humidProp["type"] as? String {
+                        #expect(typeString == "integer")
+                    } else {
+                        Issue.record("humidity type is neither array nor string")
+                    }
                     #expect(humidProp["description"] as? String == "Humidity percentage")
                 }
             }
