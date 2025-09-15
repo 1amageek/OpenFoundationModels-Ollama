@@ -13,7 +13,7 @@ internal extension GenerationOptions {
 }
 
 /// Ollama Language Model Provider for OpenFoundationModels
-public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
+public final class OllamaLanguageModel: LanguageModel, Sendable {
     
     // MARK: - Properties
     internal let httpClient: OllamaHTTPClient
@@ -104,8 +104,8 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
         return createResponseEntry(from: response)
     }
     
-    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncStream<Transcript.Entry> {
-        return AsyncStream { continuation in
+    public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncThrowingStream<Transcript.Entry, Error> {
+        return AsyncThrowingStream { continuation in
             Task {
                 do {
                     // Convert Transcript to Ollama format
@@ -218,7 +218,7 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                     
                     continuation.finish()
                 } catch {
-                    continuation.finish()
+                    continuation.finish(throwing: error)
                 }
             }
         }

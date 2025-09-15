@@ -203,7 +203,7 @@ struct TranscriptTests {
         var receivedEntries: [Transcript.Entry] = []
         let stream = model.stream(transcript: transcript, options: nil)
         
-        for await entry in stream {
+        for try await entry in stream {
             receivedEntries.append(entry)
         }
         

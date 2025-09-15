@@ -418,7 +418,7 @@ struct OllamaToolTests {
             options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 20)
         )
         
-        for await entry in stream {
+        for try await entry in stream {
             responseCount += 1
             if case .response(let response) = entry {
                 #expect(!response.segments.isEmpty)

@@ -674,7 +674,7 @@ extension ResponseFormatTests {
         var fullContent = ""
         let stream = model.stream(transcript: transcript, options: nil)
         
-        for await entry in stream {
+        for try await entry in stream {
             if case .response(let response) = entry {
                 for segment in response.segments {
                     if case .text(let textSegment) = segment {
@@ -744,7 +744,7 @@ extension ResponseFormatTests {
         
         let stream = model.stream(transcript: transcript, options: nil)
         
-        for await entry in stream {
+        for try await entry in stream {
             if case .response(let response) = entry {
                 for segment in response.segments {
                     if case .text(let textSegment) = segment {
@@ -830,7 +830,7 @@ extension ResponseFormatTests {
         
         let stream = model.stream(transcript: transcript, options: nil)
         
-        for await entry in stream {
+        for try await entry in stream {
             if case .response(let response) = entry {
                 for segment in response.segments {
                     if case .text(let textSegment) = segment {
@@ -911,7 +911,7 @@ extension ResponseFormatTests {
         
         let stream = model.stream(transcript: transcript, options: nil)
         
-        for await entry in stream {
+        for try await entry in stream {
             if case .response(let response) = entry {
                 for segment in response.segments {
                     if case .text(let textSegment) = segment {
