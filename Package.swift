@@ -28,7 +28,8 @@ let package = Package(
         .target(
             name: "OpenFoundationModelsOllama",
             dependencies: [
-                .product(name: "OpenFoundationModels", package: "OpenFoundationModels")
+                .product(name: "OpenFoundationModels", package: "OpenFoundationModels"),
+                .product(name: "OpenFoundationModelsExtra", package: "OpenFoundationModels")
             ]
         ),
         .testTarget(
