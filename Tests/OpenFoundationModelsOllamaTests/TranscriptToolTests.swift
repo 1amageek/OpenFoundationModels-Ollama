@@ -288,7 +288,7 @@ struct TranscriptToolTests {
         ])
         
         // Extract tools using TranscriptConverter
-        let tools = TranscriptConverter.extractTools(from: transcript) ?? []
+        let tools = try TranscriptConverter.extractTools(from: transcript) ?? []
         
         #expect(tools.count == 2)
         

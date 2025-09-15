@@ -87,7 +87,7 @@ struct TranscriptTests {
         ])
         
         // Extract tools
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         
         #expect(tools?.count == 1)
         #expect(tools?.first?.function.name == "get_weather")

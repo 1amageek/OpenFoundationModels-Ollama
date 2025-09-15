@@ -47,7 +47,7 @@ func testMemorySessionListSchema() async throws {
     ])
     
     // This will trigger the debug prints
-    let tools = TranscriptConverter.extractTools(from: transcript)
+    let tools = try TranscriptConverter.extractTools(from: transcript)
     
     // Print the actual tools that would be sent to Ollama
     if let tools = tools {

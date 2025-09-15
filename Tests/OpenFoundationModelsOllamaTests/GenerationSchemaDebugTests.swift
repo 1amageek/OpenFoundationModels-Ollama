@@ -85,7 +85,7 @@ struct GenerationSchemaDebugTests {
         ])
         
         // Extract the tools and check the parameters conversion
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         
         if let tool = tools?.first {
             let params = tool.function.parameters

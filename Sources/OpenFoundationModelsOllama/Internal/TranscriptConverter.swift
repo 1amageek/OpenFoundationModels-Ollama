@@ -3,6 +3,11 @@ import OpenFoundationModels
 import OpenFoundationModelsCore
 import OpenFoundationModelsExtra
 
+/// Errors that can occur during transcript conversion
+internal enum TranscriptConverterError: Error {
+    case invalidSchemaFormat
+}
+
 /// Converts OpenFoundationModels Transcript to Ollama API formats
 internal struct TranscriptConverter {
 
@@ -58,12 +63,12 @@ internal struct TranscriptConverter {
     // MARK: - Tool Extraction
 
     /// Extract tool definitions from Transcript
-    static func extractTools(from transcript: Transcript) -> [Tool]? {
+    static func extractTools(from transcript: Transcript) throws -> [Tool]? {
         // Use _entries from OpenFoundationModelsExtra for direct access
         for entry in transcript._entries {
             if case .instructions(let instructions) = entry,
                !instructions.toolDefinitions.isEmpty {
-                return instructions.toolDefinitions.map { convertToolDefinition($0) }
+                return try instructions.toolDefinitions.map { try convertToolDefinition($0) }
             }
         }
         return nil
@@ -151,37 +156,28 @@ internal struct TranscriptConverter {
     }
 
     /// Convert Transcript.ToolDefinition to Ollama Tool
-    private static func convertToolDefinition(_ definition: Transcript.ToolDefinition) -> Tool {
+    private static func convertToolDefinition(_ definition: Transcript.ToolDefinition) throws -> Tool {
         return Tool(
             type: "function",
             function: Tool.Function(
                 name: definition.name,
                 description: definition.description,
-                parameters: convertSchemaToParameters(definition.parameters)
+                parameters: try convertSchemaToParameters(definition.parameters)
             )
         )
     }
 
     /// Convert GenerationSchema to Tool.Function.Parameters
-    private static func convertSchemaToParameters(_ schema: GenerationSchema) -> Tool.Function.Parameters {
+    private static func convertSchemaToParameters(_ schema: GenerationSchema) throws -> Tool.Function.Parameters {
         // Encode GenerationSchema to JSON and extract properties
-        do {
-            let encoder = JSONEncoder()
-            let jsonData = try encoder.encode(schema)
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(schema)
 
-            if let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                return parseSchemaJSON(json)
-            }
-        } catch {
-            // If encoding fails, return empty schema
+        guard let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            throw TranscriptConverterError.invalidSchemaFormat
         }
 
-        // Fallback: return empty object schema
-        return Tool.Function.Parameters(
-            type: "object",
-            properties: [:],
-            required: []
-        )
+        return parseSchemaJSON(json)
     }
 
     /// Parse schema JSON to create Tool.Function.Parameters

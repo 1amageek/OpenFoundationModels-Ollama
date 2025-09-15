@@ -96,7 +96,7 @@ struct GenerableToolTests {
     // MARK: - Tests
     
     @Test("Verify @Generable generates GenerationSchema")
-    func testGenerableSchemaGeneration() {
+    func testGenerableSchemaGeneration() throws {
         // Check if WeatherToolArguments has a generationSchema
         let schema = WeatherToolArguments.generationSchema
         
@@ -115,7 +115,7 @@ struct GenerableToolTests {
     }
     
     @Test("Tool.parameters auto-implementation with @Generable")
-    func testToolParametersAutoImplementation() {
+    func testToolParametersAutoImplementation() throws {
         let generableTool = WeatherToolWithGenerable()
         let manualTool = ManualWeatherTool()
         
@@ -144,7 +144,7 @@ struct GenerableToolTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: generableTranscript)
+        let tools = try TranscriptConverter.extractTools(from: generableTranscript)
         #expect(tools?.count == 1)
         
         if let tool = tools?.first {
@@ -269,7 +269,7 @@ struct GenerableToolTests {
     }
     
     @Test("Compare @Generable vs Manual schema generation")
-    func testCompareGenerableVsManualSchema() {
+    func testCompareGenerableVsManualSchema() throws {
         let generableTool = WeatherToolWithGenerable()
         let manualTool = ManualWeatherTool()
         
@@ -301,8 +301,8 @@ struct GenerableToolTests {
         ])
         
         // Extract and compare
-        let generableTools = TranscriptConverter.extractTools(from: generableTranscript)
-        let manualTools = TranscriptConverter.extractTools(from: manualTranscript)
+        let generableTools = try TranscriptConverter.extractTools(from: generableTranscript)
+        let manualTools = try TranscriptConverter.extractTools(from: manualTranscript)
         
         #expect(generableTools?.count == 1)
         #expect(manualTools?.count == 1)

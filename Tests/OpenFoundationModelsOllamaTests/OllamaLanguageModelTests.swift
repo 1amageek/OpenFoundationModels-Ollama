@@ -170,7 +170,7 @@ struct OllamaLanguageModelTests {
     }
     
     @Test("Tool extraction from transcript")
-    func testToolExtractionFromTranscript() {
+    func testToolExtractionFromTranscript() throws {
         
         // Create a mock schema for testing
         let mockSchema = GenerationSchema(
@@ -193,7 +193,7 @@ struct OllamaLanguageModelTests {
         ])
         
         // Extract tools
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         
         #expect(tools?.count == 1)
         #expect(tools?.first?.function.name == "test_tool")

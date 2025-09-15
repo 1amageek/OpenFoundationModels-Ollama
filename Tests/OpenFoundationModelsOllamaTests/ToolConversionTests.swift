@@ -28,7 +28,7 @@ struct ToolConversionTests {
         ])
         
         // Extract tools and verify
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         
         #expect(tools?.count == 1)
         #expect(tools?.first?.function.name == "get_weather")
@@ -61,7 +61,7 @@ struct ToolConversionTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         
         #expect(tools?.count == 1)
         #expect(tools?.first?.function.parameters.type == "string") // Simplified schema type
@@ -91,7 +91,7 @@ struct ToolConversionTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         
         #expect(tools?.count == 2)
         #expect(tools?.first?.function.name == "get_weather")
@@ -108,7 +108,7 @@ struct ToolConversionTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         
         #expect(tools == nil)
     }
@@ -218,7 +218,7 @@ struct ToolConversionTests {
         #expect(messages[4].role == .assistant) // Final response
         
         // Extract tools
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         #expect(tools?.first?.function.name == "get_weather")
     }

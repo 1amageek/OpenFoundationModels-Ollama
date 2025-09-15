@@ -52,7 +52,7 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
     public func generate(transcript: Transcript, options: GenerationOptions?) async throws -> Transcript.Entry {
         // Convert Transcript to Ollama format
         var messages = TranscriptConverter.buildMessages(from: transcript)
-        let toolDefinitions = TranscriptConverter.extractTools(from: transcript)
+        let toolDefinitions = try TranscriptConverter.extractTools(from: transcript)
         
         // Try to extract response format with full schema first, fallback to simple format
         let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
@@ -110,7 +110,7 @@ public final class OllamaLanguageModel: LanguageModel, @unchecked Sendable {
                 do {
                     // Convert Transcript to Ollama format
                     var messages = TranscriptConverter.buildMessages(from: transcript)
-                    let tools = TranscriptConverter.extractTools(from: transcript)
+                    let tools = try TranscriptConverter.extractTools(from: transcript)
                     
                     
                     // Try to extract response format with full schema first, fallback to simple format

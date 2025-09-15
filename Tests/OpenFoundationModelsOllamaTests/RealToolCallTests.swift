@@ -167,7 +167,7 @@ struct RealToolCallTests {
         ])
         
         // Extract tools using our converter
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         
         #expect(tools?.count == 1)
         

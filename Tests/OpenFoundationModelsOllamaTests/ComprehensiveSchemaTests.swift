@@ -30,7 +30,7 @@ struct ComprehensiveSchemaTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         
         if let tool = tools?.first {
@@ -106,7 +106,7 @@ struct ComprehensiveSchemaTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         
         if let tool = tools?.first {
@@ -166,7 +166,7 @@ struct ComprehensiveSchemaTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         
         if let tool = tools?.first {
@@ -334,7 +334,7 @@ struct ComprehensiveSchemaTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 2)
         
         // Create Ollama API request

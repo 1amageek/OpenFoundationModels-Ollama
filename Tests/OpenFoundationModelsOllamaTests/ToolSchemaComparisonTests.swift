@@ -25,7 +25,7 @@ struct ToolSchemaComparisonTests {
             ))
         ])
         
-        let simpleTools = TranscriptConverter.extractTools(from: transcript1)
+        let simpleTools = try TranscriptConverter.extractTools(from: transcript1)
         if let tool = simpleTools?.first {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
@@ -60,7 +60,7 @@ struct ToolSchemaComparisonTests {
             ))
         ])
         
-        let dynamicTools = TranscriptConverter.extractTools(from: transcript2)
+        let dynamicTools = try TranscriptConverter.extractTools(from: transcript2)
         if let tool = dynamicTools?.first {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
@@ -96,7 +96,7 @@ struct ToolSchemaComparisonTests {
             ))
         ])
         
-        let simpleTools = TranscriptConverter.extractTools(from: transcript1)
+        let simpleTools = try TranscriptConverter.extractTools(from: transcript1)
         if let tool = simpleTools?.first {
             print("- Name: \(tool.function.name)")
             print("- Parameters type: \(tool.function.parameters.type)")
@@ -115,7 +115,7 @@ struct ToolSchemaComparisonTests {
             ))
         ])
         
-        let dynamicTools = TranscriptConverter.extractTools(from: transcript2)
+        let dynamicTools = try TranscriptConverter.extractTools(from: transcript2)
         if let tool = dynamicTools?.first {
             print("- Name: \(tool.function.name)")
             print("- Parameters type: \(tool.function.parameters.type)")

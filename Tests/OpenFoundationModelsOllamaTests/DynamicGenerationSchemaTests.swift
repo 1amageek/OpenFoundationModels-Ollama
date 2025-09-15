@@ -32,7 +32,7 @@ struct DynamicGenerationSchemaTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         
         if let extractedTool = tools?.first {
@@ -74,7 +74,7 @@ struct DynamicGenerationSchemaTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         
         if let tool = tools?.first {
@@ -111,7 +111,7 @@ struct DynamicGenerationSchemaTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         
         if let tool = tools?.first {
@@ -200,7 +200,7 @@ struct DynamicGenerationSchemaTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         
         if let tool = tools?.first {
@@ -268,7 +268,7 @@ struct DynamicGenerationSchemaTests {
             ))
         ])
         
-        let tools = TranscriptConverter.extractTools(from: transcript)
+        let tools = try TranscriptConverter.extractTools(from: transcript)
         #expect(tools?.count == 1)
         
         if let tool = tools?.first {
