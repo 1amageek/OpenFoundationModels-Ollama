@@ -648,4 +648,6 @@ public struct ErrorResponse: Codable, Error, LocalizedError, Sendable {
 // MARK: - Empty Request
 
 /// Empty request for endpoints that don't require body
-public struct EmptyRequest: Codable, Sendable {}
+public struct EmptyRequest: Codable, Sendable {
+    public init() {}
+}
