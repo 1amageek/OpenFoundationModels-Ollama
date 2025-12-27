@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenFoundationModels-Ollama is a Swift package that provides an Ollama implementation of the LanguageModel protocol from the OpenFoundationModels framework. It enables the use of Ollama's locally-hosted models through Apple's Foundation Models API interface.
 
-## Current Implementation Status (2025-08-13)
+## Current Implementation Status (2025-12-27)
 
 ### ✅ Transcript-Based Architecture
 The implementation has been updated to support the new Transcript-based LanguageModel protocol from OpenFoundationModels:
@@ -16,20 +16,35 @@ The implementation has been updated to support the new Transcript-based Language
 - **Tool Support**: Automatically extracts and converts ToolDefinitions from Transcript.Instructions
 - **Complete History**: Handles all Transcript.Entry types (instructions, prompt, response, toolCalls, toolOutput)
 
-### Key Components Updated
+### ✅ Generable Streaming with Retry
+Robust support for `@Generable` types with automatic retry on parse failures:
+
+- **RetryPolicy**: Configurable retry behavior (maxAttempts, delay, error context)
+- **Error Context in Retry**: Failed content and error details are included in retry prompts
+- **Partial State Tracking**: Monitor generation progress with `PartialState<T>`
+- **JSON Auto-Correction**: Automatic fix for common JSON issues (markdown blocks, trailing commas)
+
+### Key Components
 
 1. **OllamaLanguageModel**
-   - Now implements Transcript-based LanguageModel protocol
+   - Implements Transcript-based LanguageModel protocol
    - Uses `/api/chat` endpoint primarily for better feature support
    - Automatic tool extraction from Transcript
+   - Extension methods for Generable streaming with retry
 
-2. **TranscriptConverter** (New)
+2. **TranscriptConverter**
    - `buildMessages(from: Transcript)` → Ollama Messages
    - `extractTools(from: Transcript)` → Ollama Tools
-   - `extractResponseFormat(from: Transcript)` → Response format
+   - `extractResponseFormat(from: Transcript)` → Response format (with full schema)
    - `extractOptions(from: Transcript)` → Generation options
 
-3. **API Usage**
+3. **Generable Components** (Sources/OpenFoundationModelsOllama/Generable/)
+   - `GenerableTypes.swift`: Core types (RetryPolicy, PartialState, RetryContext, GenerableError)
+   - `RetryController.swift`: Actor-based retry management with error history
+   - `GenerableParser.swift`: JSON parsing with auto-correction and schema validation
+   - `GenerableStreamSession.swift`: Streaming session with automatic retry
+
+4. **API Usage**
    - Primary endpoint: `/api/chat` (supports tools, better context handling)
    - Fallback: `/api/generate` (simple completions, rarely used now)
 
@@ -209,6 +224,13 @@ Each line is a complete JSON object:
    - First request may be slow (model loading)
    - Use `keep_alive` parameter to control model retention
 
+4. **isAvailable Property**:
+   - Always returns `true` by design
+   - The `LanguageModel` protocol requires a synchronous `Bool` property
+   - Ollama runs locally, so async availability checks would block or require complex caching
+   - Actual availability is validated when `generate` or `stream` is called
+   - If Ollama is not running, these methods throw appropriate errors
+
 ## Tool Calling Support
 
 ### Overview
@@ -267,6 +289,153 @@ Comprehensive tests are included for:
 - Tool call response parsing
 - Tool message round-trip encoding
 - Integration tests with actual Ollama API
+
+## Generable Streaming with Retry
+
+### Overview
+The implementation provides robust support for `@Generable` types with automatic retry when JSON parsing or schema validation fails. This is essential for reliable structured output generation.
+
+### Core Types
+
+```swift
+// RetryPolicy - Configure retry behavior
+public struct RetryPolicy: Sendable {
+    public let maxAttempts: Int           // Maximum retry attempts
+    public let includeErrorContext: Bool  // Include error details in retry prompt
+    public let retryDelay: TimeInterval   // Delay between retries
+
+    public static let none = RetryPolicy(maxAttempts: 0)
+    public static let `default` = RetryPolicy(maxAttempts: 3)
+    public static let aggressive = RetryPolicy(maxAttempts: 5)
+}
+
+// GenerableStreamResult - Stream output types
+public enum GenerableStreamResult<T: Generable & Sendable & Decodable>: Sendable {
+    case partial(PartialState<T>)   // Partial content received
+    case retrying(RetryContext)     // Retry in progress
+    case complete(T)                // Successfully completed
+    case failed(GenerableError)     // Failed after all retries
+}
+```
+
+### Usage Examples
+
+#### Non-Streaming Generation with Retry
+```swift
+@Generable
+struct WeatherResponse: Sendable, Codable {
+    let temperature: Int
+    let condition: String
+}
+
+let model = OllamaLanguageModel(modelName: "gpt-oss:20b")
+let transcript = Transcript(entries: [
+    .instructions(Transcript.Instructions(
+        segments: [.text("You are a weather assistant.")],
+        toolDefinitions: []
+    ))
+])
+
+let result = try await model.generateWithRetry(
+    transcript: transcript,
+    prompt: "What's the weather in Tokyo?",
+    generating: WeatherResponse.self,
+    options: GenerableStreamOptions(
+        retryPolicy: RetryPolicy(maxAttempts: 3),
+        generationOptions: GenerationOptions(temperature: 0.1)
+    )
+)
+print("Temperature: \(result.temperature)°C")
+```
+
+#### Streaming Generation with Retry
+```swift
+let stream = model.streamWithRetry(
+    transcript: transcript,
+    prompt: "What's the weather in Tokyo?",
+    generating: WeatherResponse.self,
+    options: GenerableStreamOptions(
+        retryPolicy: .default,
+        yieldPartialValues: true
+    )
+)
+
+for try await result in stream {
+    switch result {
+    case .partial(let state):
+        print("Partial: \(state.accumulatedContent)")
+    case .retrying(let context):
+        print("Retry \(context.attemptNumber)/\(context.maxAttempts)")
+        print("Error: \(context.error)")
+    case .complete(let value):
+        print("Complete: \(value)")
+    case .failed(let error):
+        print("Failed: \(error)")
+    }
+}
+```
+
+### Error Context Flow
+
+When a retry occurs, the error context is automatically included in the retry prompt:
+
+```
+Original: "What's the weather in Tokyo?"
+
+Retry prompt (after schema validation failure):
+"What's the weather in Tokyo?
+
+[Retry attempt 1/3]
+Previous response failed schema validation for field 'temperature': expected int
+Please correct the response to match the expected schema."
+```
+
+### Retry Controller
+
+The `RetryController` actor manages retry state:
+
+```swift
+public actor RetryController<T: Generable & Sendable> {
+    // State
+    public var canRetry: Bool
+    public var remainingAttempts: Int
+    public var currentAttempt: Int
+    public var lastError: GenerableError?
+    public var lastFailedContent: String?
+
+    // Methods
+    public func recordFailure(error: GenerableError, failedContent: String) -> RetryContext?
+    public func recordSuccess()
+    public func getLastRetryContext() -> RetryContext?
+    public func buildRetryPrompt(originalPrompt: String, context: RetryContext) -> String
+}
+```
+
+### JSON Auto-Correction
+
+The `GenerableParser` automatically corrects common JSON issues:
+
+1. **Markdown blocks**: Removes ```json and ``` wrappers
+2. **Trailing commas**: Removes trailing commas before `}` or `]`
+3. **Single quotes**: Converts single quotes to double quotes
+4. **Unquoted keys**: Adds quotes to unquoted object keys
+5. **Incomplete JSON**: Attempts to close unclosed brackets/braces
+
+### GenerableError Types
+
+```swift
+public enum GenerableError: Error, Sendable {
+    case jsonParsingFailed(String, underlyingError: String)
+    case schemaValidationFailed(String, details: String)
+    case streamInterrupted(String)
+    case maxRetriesExceeded(attempts: Int, lastError: String)
+    case connectionError(String)
+    case emptyResponse
+    case unknown(String)
+
+    public var isRetryable: Bool  // Determines if error allows retry
+}
+```
 
 ## Future Improvements
 

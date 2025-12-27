@@ -16,8 +16,7 @@ struct DynamicGenerationSchemaTests {
                 (name: "query", type: "string", description: "Search query", isOptional: false),
                 (name: "max_results", type: "integer", description: "Maximum number of results", isOptional: true),
                 (name: "include_images", type: "boolean", description: "Include image results", isOptional: true)
-            ],
-            required: ["query"]
+            ]
         )
         
         #expect(tool.name == "search")

@@ -281,6 +281,72 @@ struct TranscriptTests {
         }
         // The model might either call the tool or provide a direct response
     }
+
+    // MARK: - extractTools Behavior Tests
+
+    @Test("extractTools uses most recent instructions")
+    func testExtractToolsUsesMostRecentInstructions() throws {
+        // Create a transcript with multiple instructions - tools should come from the LAST one
+        let oldTool = ToolSchemaHelper.createSimpleTool(
+            name: "old_tool",
+            description: "This tool should NOT be used"
+        )
+
+        let newTool = ToolSchemaHelper.createSimpleTool(
+            name: "new_tool",
+            description: "This tool SHOULD be used"
+        )
+
+        let transcript = Transcript(entries: [
+            // First instructions with old tool
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-1", content: "Initial instructions"))],
+                toolDefinitions: [oldTool]
+            )),
+            // Some conversation
+            .prompt(Transcript.Prompt(
+                id: "prompt-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-2", content: "Hello"))],
+                options: GenerationOptions(),
+                responseFormat: nil
+            )),
+            // Second instructions with new tool (should be used)
+            .instructions(Transcript.Instructions(
+                id: "inst-2",
+                segments: [.text(Transcript.TextSegment(id: "seg-3", content: "Updated instructions"))],
+                toolDefinitions: [newTool]
+            ))
+        ])
+
+        // Extract tools - should get the NEWEST tool
+        let tools = try TranscriptConverter.extractTools(from: transcript)
+
+        #expect(tools != nil)
+        #expect(tools?.count == 1)
+        #expect(tools?.first?.function.name == "new_tool")
+        #expect(tools?.first?.function.description == "This tool SHOULD be used")
+    }
+
+    @Test("extractTools returns nil when no instructions have tools")
+    func testExtractToolsReturnsNilWhenNoTools() throws {
+        let transcript = Transcript(entries: [
+            .instructions(Transcript.Instructions(
+                id: "inst-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-1", content: "Instructions without tools"))],
+                toolDefinitions: []  // Empty
+            )),
+            .prompt(Transcript.Prompt(
+                id: "prompt-1",
+                segments: [.text(Transcript.TextSegment(id: "seg-2", content: "Hello"))],
+                options: GenerationOptions(),
+                responseFormat: nil
+            ))
+        ])
+
+        let tools = try TranscriptConverter.extractTools(from: transcript)
+        #expect(tools == nil)
+    }
 }
 
 // TestSkip is already defined in OllamaToolTests.swift

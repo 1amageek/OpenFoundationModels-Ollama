@@ -63,9 +63,11 @@ internal struct TranscriptConverter {
     // MARK: - Tool Extraction
 
     /// Extract tool definitions from Transcript
+    /// Uses the most recent instructions with toolDefinitions (consistent with extractOptions and extractResponseFormat)
     static func extractTools(from transcript: Transcript) throws -> [Tool]? {
         // Use _entries from OpenFoundationModelsExtra for direct access
-        for entry in transcript._entries {
+        // Search in reverse to get the most recent instructions (like extractOptions and extractResponseFormat)
+        for entry in transcript._entries.reversed() {
             if case .instructions(let instructions) = entry,
                !instructions.toolDefinitions.isEmpty {
                 return try instructions.toolDefinitions.map { try convertToolDefinition($0) }
@@ -189,12 +191,7 @@ internal struct TranscriptConverter {
         var toolProperties: [String: Tool.Function.Parameters.Property] = [:]
         if let properties = json["properties"] as? [String: [String: Any]] {
             for (key, propJson) in properties {
-                let propType = propJson["type"] as? String ?? "string"
-                let propDescription = propJson["description"] as? String ?? ""
-                toolProperties[key] = Tool.Function.Parameters.Property(
-                    type: propType,
-                    description: propDescription
-                )
+                toolProperties[key] = parsePropertyJSON(propJson)
             }
         }
 
@@ -205,6 +202,55 @@ internal struct TranscriptConverter {
             type: type,
             properties: toolProperties,
             required: required
+        )
+    }
+
+    /// Parse a single property JSON to create Tool.Function.Parameters.Property
+    private static func parsePropertyJSON(_ propJson: [String: Any]) -> Tool.Function.Parameters.Property {
+        let propType = propJson["type"] as? String ?? "string"
+        let propDescription = propJson["description"] as? String ?? ""
+
+        // Extract enum values (from "enum" or "anyOf")
+        var enumValues: [String]? = nil
+        if let enumArray = propJson["enum"] as? [String] {
+            enumValues = enumArray
+        } else if let anyOfArray = propJson["anyOf"] as? [[String: Any]] {
+            // Extract string values from anyOf array
+            enumValues = anyOfArray.compactMap { item -> String? in
+                if let constValue = item["const"] as? String {
+                    return constValue
+                }
+                return item["enum"] as? String
+            }
+            if enumValues?.isEmpty == true {
+                enumValues = nil
+            }
+        }
+
+        // Extract items for array types
+        var items: Tool.Function.Parameters.Property? = nil
+        if propType == "array", let itemsJson = propJson["items"] as? [String: Any] {
+            items = parsePropertyJSON(itemsJson)
+        }
+
+        // Extract nested properties for object types
+        var nestedProperties: [String: Tool.Function.Parameters.Property]? = nil
+        var nestedRequired: [String]? = nil
+        if propType == "object", let propsJson = propJson["properties"] as? [String: [String: Any]] {
+            nestedProperties = [:]
+            for (key, nestedPropJson) in propsJson {
+                nestedProperties?[key] = parsePropertyJSON(nestedPropJson)
+            }
+            nestedRequired = propJson["required"] as? [String]
+        }
+
+        return Tool.Function.Parameters.Property(
+            type: propType,
+            description: propDescription,
+            enum: enumValues,
+            items: items,
+            properties: nestedProperties,
+            required: nestedRequired
         )
     }
 

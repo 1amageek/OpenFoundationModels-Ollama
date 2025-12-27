@@ -148,29 +148,15 @@ public actor OllamaHTTPClient {
                                 continue
                             }
                             
-                            do {
-                                let response = try decoder.decode(Response.self, from: lineData)
-                                continuation.yield(response)
-                            } catch {
-                                // Log decoding error but continue processing
-                                #if DEBUG
-                                print("Failed to decode streaming response: \(error)")
-                                if let errorString = String(data: lineData, encoding: .utf8) {
-                                    print("Failed to decode line: \(errorString.prefix(200))")
-                                }
-                                #endif
-                            }
+                            let response = try decoder.decode(Response.self, from: lineData)
+                            continuation.yield(response)
                         }
                     }
                     
                     // Process any remaining data
                     if !buffer.isEmpty {
-                        do {
-                            let response = try decoder.decode(Response.self, from: buffer)
-                            continuation.yield(response)
-                        } catch {
-                            // Silently ignore any incomplete final buffer
-                        }
+                        let response = try decoder.decode(Response.self, from: buffer)
+                        continuation.yield(response)
                     }
                     
                     continuation.finish()

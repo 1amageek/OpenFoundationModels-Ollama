@@ -96,8 +96,7 @@ struct RichSchemaConversionTests {
                 (name: "query", type: "string", description: "Search query", isOptional: false),
                 (name: "max_results", type: "integer", description: "Maximum number of results", isOptional: true),
                 (name: "filters", type: "string", description: "Search filters", isOptional: true)
-            ],
-            required: ["query"]
+            ]
         )
         
         let transcript = Transcript(entries: [
@@ -143,8 +142,7 @@ struct RichSchemaConversionTests {
                 (name: "columns", type: "string", description: "Columns to select (comma-separated)", isOptional: true),
                 (name: "conditions", type: "string", description: "WHERE conditions", isOptional: true),
                 (name: "limit", type: "integer", description: "Maximum rows", isOptional: true)
-            ],
-            required: ["table"]
+            ]
         )
         
         let transcript = Transcript(entries: [

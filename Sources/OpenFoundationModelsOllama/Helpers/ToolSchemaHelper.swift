@@ -20,11 +20,15 @@ public struct ToolSchemaHelper {
     }
     
     /// Create a tool definition using DynamicGenerationSchema
+    /// - Parameters:
+    ///   - name: Tool name
+    ///   - description: Tool description
+    ///   - properties: Array of property definitions. Use `isOptional: false` to mark a field as required.
+    /// - Note: Required fields are determined by `isOptional` flag in each property tuple.
     public static func createToolWithDynamicSchema(
         name: String,
         description: String,
-        properties: [(name: String, type: String, description: String, isOptional: Bool)],
-        required: [String] = []
+        properties: [(name: String, type: String, description: String, isOptional: Bool)]
     ) throws -> Transcript.ToolDefinition {
         // Build DynamicGenerationSchema properties
         let dynamicProperties = properties.map { prop in

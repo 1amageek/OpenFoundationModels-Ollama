@@ -48,8 +48,7 @@ struct ToolSchemaComparisonTests {
                 (name: "id", type: "string", description: "Data ID", isOptional: false),
                 (name: "format", type: "string", description: "Response format", isOptional: true),
                 (name: "include_metadata", type: "boolean", description: "Include metadata", isOptional: true)
-            ],
-            required: ["id"]
+            ]
         )
         
         let transcript2 = Transcript(entries: [
@@ -182,8 +181,7 @@ struct ToolSchemaComparisonTests {
                 (name: "category", type: "string", description: "Category filter", isOptional: true),
                 (name: "max_results", type: "integer", description: "Maximum results", isOptional: true),
                 (name: "sort_by", type: "string", description: "Sort order", isOptional: true)
-            ],
-            required: ["query"]
+            ]
         )
         print("- Created dynamic tool: \(v2Tool.name)")
         print("- Added property definitions")

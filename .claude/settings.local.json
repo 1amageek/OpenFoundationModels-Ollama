@@ -23,7 +23,8 @@
       "Bash(sed:*)",
       "Bash(swift:*)",
       "Bash(cp:*)",
-      "WebFetch(domain:cookbook.openai.com)"
+      "WebFetch(domain:cookbook.openai.com)",
+      "Bash(tree:*)"
     ],
     "deny": []
   }

@@ -21,10 +21,7 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
     internal let configuration: OllamaConfiguration
     
     // MARK: - LanguageModel Protocol Compliance
-    public var isAvailable: Bool {
-        // For simplicity, return true - actual availability can be checked via /api/tags
-        return true
-    }
+    public var isAvailable: Bool { true }
     
     // MARK: - Initialization
     

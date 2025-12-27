@@ -233,10 +233,48 @@ public struct Tool: Codable, Sendable {
             public struct Property: Codable, Sendable {
                 public let type: String
                 public let description: String
-                
-                public init(type: String, description: String) {
+                /// Enum values for string types with restricted values (anyOf)
+                public let `enum`: [String]?
+                /// For array types, the schema of array elements (uses Box for recursive reference)
+                public let items: Box<Property>?
+                /// For object types, nested property definitions
+                public let properties: [String: Property]?
+                /// Required fields for nested objects
+                public let required: [String]?
+
+                public init(
+                    type: String,
+                    description: String,
+                    `enum`: [String]? = nil,
+                    items: Property? = nil,
+                    properties: [String: Property]? = nil,
+                    required: [String]? = nil
+                ) {
                     self.type = type
                     self.description = description
+                    self.enum = `enum`
+                    self.items = items.map { Box($0) }
+                    self.properties = properties
+                    self.required = required
+                }
+            }
+
+            /// Box type for indirect storage (enables recursive types in structs)
+            public final class Box<T: Codable & Sendable>: Codable, @unchecked Sendable {
+                public let value: T
+
+                public init(_ value: T) {
+                    self.value = value
+                }
+
+                public init(from decoder: Decoder) throws {
+                    let container = try decoder.singleValueContainer()
+                    self.value = try container.decode(T.self)
+                }
+
+                public func encode(to encoder: Encoder) throws {
+                    var container = encoder.singleValueContainer()
+                    try container.encode(value)
                 }
             }
         }
