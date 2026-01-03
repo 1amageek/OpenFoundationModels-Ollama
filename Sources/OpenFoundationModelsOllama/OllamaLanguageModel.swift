@@ -377,7 +377,7 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
         switch format {
         case .jsonSchema(let schema):
             var harmonyFormat = "# Response Formats\n\n## StructuredResponse\n\n"
-            
+
             if let jsonData = try? JSONSerialization.data(withJSONObject: schema, options: []),
                let schemaString = String(data: jsonData, encoding: .utf8) {
                 harmonyFormat += schemaString
@@ -385,19 +385,37 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
                 // Fallback schema
                 harmonyFormat += #"{"type":"object","properties":{}}"#
             }
-            
+
+            // Add explicit instructions for JSON output
+            harmonyFormat += """
+
+
+            # Output Instructions
+
+            - You MUST output valid JSON only. No markdown, no code fences, no prose.
+            - Output the JSON directly in your response content, NOT in thinking.
+            - The JSON must conform exactly to the StructuredResponse schema above.
+            - Do not include any text before or after the JSON object.
+            """
+
             return harmonyFormat
-            
+
         case .json:
             // Simple JSON format for harmony
             return """
             # Response Formats
-            
+
             ## JSONResponse
-            
+
             {"type":"object","description":"JSON response format"}
+
+            # Output Instructions
+
+            - You MUST output valid JSON only. No markdown, no code fences, no prose.
+            - Output the JSON directly in your response content, NOT in thinking.
+            - Do not include any text before or after the JSON object.
             """
-            
+
         case .text:
             return ""
         }

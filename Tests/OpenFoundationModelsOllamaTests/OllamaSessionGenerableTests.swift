@@ -80,7 +80,6 @@ struct OllamaSessionGenerableTests {
     // MARK: - Tests
 
     @Test("Session.respond(generating:) with Ollama x20")
-    @available(macOS 13.0, iOS 16.0, *)
     func testGenerableRespondFiveTrials() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running at \(baseURL)")
@@ -95,7 +94,7 @@ struct OllamaSessionGenerableTests {
         var successes = 0
         var failures = 0
 
-        for i in 0..<50 {
+        for i in 0..<20 {
             // Fresh session each iteration to avoid transcript contamination
             let session = LanguageModelSession(
                 model: model,

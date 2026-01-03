@@ -24,7 +24,8 @@
       "Bash(swift:*)",
       "Bash(cp:*)",
       "WebFetch(domain:cookbook.openai.com)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(time swift test:*)"
     ],
     "deny": []
   }
