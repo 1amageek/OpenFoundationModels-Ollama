@@ -71,19 +71,19 @@ public struct GenerateResponse: Codable, Sendable {
     }
 }
 
-// MARK: - Chat API Types
+// MARK: - Chat API Types (Internal - for Ollama API communication)
 
 /// Request for /api/chat endpoint
-public struct ChatRequest: Codable, Sendable {
-    public let model: String
-    public let messages: [Message]
-    public let stream: Bool
-    public let options: OllamaOptions?
-    public let format: ResponseFormat?
-    public let keepAlive: String?
-    public let tools: [Tool]?
-    
-    public init(
+struct ChatRequest: Codable, Sendable {
+    let model: String
+    let messages: [Message]
+    let stream: Bool
+    let options: OllamaOptions?
+    let format: ResponseFormat?
+    let keepAlive: String?
+    let tools: [Tool]?
+
+    init(
         model: String,
         messages: [Message],
         stream: Bool = true,
@@ -100,7 +100,7 @@ public struct ChatRequest: Codable, Sendable {
         self.keepAlive = keepAlive
         self.tools = tools
     }
-    
+
     enum CodingKeys: String, CodingKey {
         case model, messages, stream, options, format, tools
         case keepAlive = "keep_alive"
@@ -108,18 +108,18 @@ public struct ChatRequest: Codable, Sendable {
 }
 
 /// Response from /api/chat endpoint
-public struct ChatResponse: Codable, Sendable {
-    public let model: String
-    public let createdAt: Date
-    public let message: Message?
-    public let done: Bool
-    public let totalDuration: Int64?
-    public let loadDuration: Int64?
-    public let promptEvalCount: Int?
-    public let promptEvalDuration: Int64?
-    public let evalCount: Int?
-    public let evalDuration: Int64?
-    
+struct ChatResponse: Codable, Sendable {
+    let model: String
+    let createdAt: Date
+    let message: Message?
+    let done: Bool
+    let totalDuration: Int64?
+    let loadDuration: Int64?
+    let promptEvalCount: Int?
+    let promptEvalDuration: Int64?
+    let evalCount: Int?
+    let evalDuration: Int64?
+
     enum CodingKeys: String, CodingKey {
         case model, message, done
         case createdAt = "created_at"
@@ -133,14 +133,14 @@ public struct ChatResponse: Codable, Sendable {
 }
 
 /// Chat message
-public struct Message: Codable, Sendable {
-    public let role: Role
-    public let content: String
-    public let toolCalls: [ToolCall]?
-    public let thinking: String?  // Add thinking field for models that support it
-    public let toolName: String?  // Tool name for tool role messages
-    
-    public init(
+struct Message: Codable, Sendable {
+    let role: Role
+    let content: String
+    let toolCalls: [ToolCall]?
+    let thinking: String?
+    let toolName: String?
+
+    init(
         role: Role,
         content: String,
         toolCalls: [ToolCall]? = nil,
@@ -153,25 +153,22 @@ public struct Message: Codable, Sendable {
         self.thinking = thinking
         self.toolName = toolName
     }
-    
+
     enum CodingKeys: String, CodingKey {
         case role, content, thinking
         case toolCalls = "tool_calls"
         case toolName = "tool_name"
     }
-    
-    // Custom decoder to handle empty role strings
-    public init(from decoder: Decoder) throws {
+
+    init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        // Handle role field that might be empty string or nil
+
         if let roleString = try? container.decode(String.self, forKey: .role), !roleString.isEmpty {
             self.role = Role(rawValue: roleString) ?? .assistant
         } else {
-            // Default to assistant role if role is empty or missing
             self.role = .assistant
         }
-        
+
         self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
         self.toolCalls = try container.decodeIfPresent([ToolCall].self, forKey: .toolCalls)
         self.thinking = try container.decodeIfPresent(String.self, forKey: .thinking)
@@ -180,7 +177,7 @@ public struct Message: Codable, Sendable {
 }
 
 /// Message role
-public enum Role: String, Codable, Sendable {
+enum Role: String, Codable, Sendable {
     case system
     case user
     case assistant
@@ -188,24 +185,24 @@ public enum Role: String, Codable, Sendable {
     case think
 }
 
-// MARK: - Tool Types
+// MARK: - Tool Types (Internal - users should use FoundationModels.Tool)
 
-/// Tool definition
-public struct Tool: Codable, Sendable {
-    public let type: String
-    public let function: Function
-    
-    public init(type: String = "function", function: Function) {
+/// Tool definition for Ollama API communication
+struct Tool: Codable, Sendable {
+    let type: String
+    let function: Function
+
+    init(type: String = "function", function: Function) {
         self.type = type
         self.function = function
     }
-    
-    public struct Function: Codable, Sendable {
-        public let name: String
-        public let description: String
-        public let parameters: Parameters
-        
-        public init(
+
+    struct Function: Codable, Sendable {
+        let name: String
+        let description: String
+        let parameters: Parameters
+
+        init(
             name: String,
             description: String,
             parameters: Parameters
@@ -214,13 +211,13 @@ public struct Tool: Codable, Sendable {
             self.description = description
             self.parameters = parameters
         }
-        
-        public struct Parameters: Codable, Sendable {
-            public let type: String
-            public let properties: [String: Property]
-            public let required: [String]
-            
-            public init(
+
+        struct Parameters: Codable, Sendable {
+            let type: String
+            let properties: [String: Property]
+            let required: [String]
+
+            init(
                 type: String = "object",
                 properties: [String: Property],
                 required: [String]
@@ -229,20 +226,20 @@ public struct Tool: Codable, Sendable {
                 self.properties = properties
                 self.required = required
             }
-            
-            public struct Property: Codable, Sendable {
-                public let type: String
-                public let description: String
-                /// Enum values for string types with restricted values (anyOf)
-                public let `enum`: [String]?
-                /// For array types, the schema of array elements (uses Box for recursive reference)
-                public let items: Box<Property>?
-                /// For object types, nested property definitions
-                public let properties: [String: Property]?
-                /// Required fields for nested objects
-                public let required: [String]?
 
-                public init(
+            struct Property: Codable, Sendable {
+                let type: String
+                let description: String
+                /// Enum values for string types with restricted values (anyOf)
+                let `enum`: [String]?
+                /// For array types, the schema of array elements (uses Box for recursive reference)
+                let items: Box<Property>?
+                /// For object types, nested property definitions
+                let properties: [String: Property]?
+                /// Required fields for nested objects
+                let required: [String]?
+
+                init(
                     type: String,
                     description: String,
                     `enum`: [String]? = nil,
@@ -260,19 +257,19 @@ public struct Tool: Codable, Sendable {
             }
 
             /// Box type for indirect storage (enables recursive types in structs)
-            public final class Box<T: Codable & Sendable>: Codable, @unchecked Sendable {
-                public let value: T
+            final class Box<T: Codable & Sendable>: Codable, @unchecked Sendable {
+                let value: T
 
-                public init(_ value: T) {
+                init(_ value: T) {
                     self.value = value
                 }
 
-                public init(from decoder: Decoder) throws {
+                init(from decoder: Decoder) throws {
                     let container = try decoder.singleValueContainer()
                     self.value = try container.decode(T.self)
                 }
 
-                public func encode(to encoder: Encoder) throws {
+                func encode(to encoder: Encoder) throws {
                     var container = encoder.singleValueContainer()
                     try container.encode(value)
                 }
@@ -281,28 +278,28 @@ public struct Tool: Codable, Sendable {
     }
 }
 
-/// Tool call
-public struct ToolCall: Codable, Sendable {
-    public let function: FunctionCall
-    
-    public init(function: FunctionCall) {
+/// Tool call from Ollama API response
+struct ToolCall: Codable, Sendable {
+    let function: FunctionCall
+
+    init(function: FunctionCall) {
         self.function = function
     }
     
-    public struct FunctionCall: Codable, Sendable {
-        public let name: String
-        public let arguments: ArgumentsContainer
-        
-        public init(name: String, arguments: [String: Any]) {
+    struct FunctionCall: Codable, Sendable {
+        let name: String
+        let arguments: ArgumentsContainer
+
+        init(name: String, arguments: [String: Any]) {
             self.name = name
             self.arguments = ArgumentsContainer(arguments)
         }
-        
-        public init(name: String, arguments: ArgumentsContainer) {
+
+        init(name: String, arguments: ArgumentsContainer) {
             self.name = name
             self.arguments = arguments
         }
-        
+
         enum CodingKeys: String, CodingKey {
             case name, arguments
         }
@@ -310,10 +307,10 @@ public struct ToolCall: Codable, Sendable {
 }
 
 /// Container for function arguments that is Sendable
-public struct ArgumentsContainer: Codable, Sendable {
+struct ArgumentsContainer: Codable, Sendable {
     private let data: Data
-    
-    public init(_ dictionary: [String: Any]) {
+
+    init(_ dictionary: [String: Any]) {
         // Convert dictionary to JSON data
         if let jsonData = try? JSONSerialization.data(withJSONObject: dictionary) {
             self.data = jsonData
@@ -321,8 +318,8 @@ public struct ArgumentsContainer: Codable, Sendable {
             self.data = Data()
         }
     }
-    
-    public var dictionary: [String: Any] {
+
+    var dictionary: [String: Any] {
         // Handle empty data case
         if data.isEmpty {
             #if DEBUG
@@ -330,7 +327,7 @@ public struct ArgumentsContainer: Codable, Sendable {
             #endif
             return [:]
         }
-        
+
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 return json
@@ -353,10 +350,10 @@ public struct ArgumentsContainer: Codable, Sendable {
             return [:]
         }
     }
-    
-    public init(from decoder: Decoder) throws {
+
+    init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        
+
         // Try to decode as dictionary first
         if let dict = try? container.decode([String: AnyCodable].self) {
             let convertedDict = dict.mapValues { $0.value }
@@ -370,10 +367,10 @@ public struct ArgumentsContainer: Codable, Sendable {
             self.data = Data()
         }
     }
-    
-    public func encode(to encoder: Encoder) throws {
+
+    func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-        
+
         if let json = try? JSONSerialization.jsonObject(with: data),
            let dict = json as? [String: Any] {
             let codableDict = dict.mapValues { AnyCodable($0) }
@@ -474,24 +471,24 @@ public struct ModelsResponse: Codable, Sendable {
 }
 
 /// Request for /api/show endpoint
-public struct ShowRequest: Codable, Sendable {
-    public let name: String
-    public let verbose: Bool?
-    
-    public init(name: String, verbose: Bool? = nil) {
+struct ShowRequest: Codable, Sendable {
+    let name: String
+    let verbose: Bool?
+
+    init(name: String, verbose: Bool? = nil) {
         self.name = name
         self.verbose = verbose
     }
 }
 
 /// Response from /api/show endpoint
-public struct ShowResponse: Codable, Sendable {
-    public let license: String?
-    public let modelfile: String?
-    public let parameters: String?
-    public let template: String?
-    public let details: ModelsResponse.Model.Details?
-    public let messages: [Message]?
+struct ShowResponse: Codable, Sendable {
+    let license: String?
+    let modelfile: String?
+    let parameters: String?
+    let template: String?
+    let details: ModelsResponse.Model.Details?
+    let messages: [Message]?
 }
 
 // MARK: - Options
