@@ -71,6 +71,66 @@ public struct GenerateResponse: Codable, Sendable {
     }
 }
 
+// MARK: - Thinking Mode
+
+/// Controls thinking output separation in Ollama API.
+///
+/// When enabled, the Ollama server parses `<think>` tags and separates
+/// thinking content from the main response content.
+enum ThinkingMode: Sendable, Equatable {
+    /// Enable thinking and let server separate it from content
+    case enabled
+    /// Disable thinking output
+    case disabled
+    /// Control thinking effort level
+    case effort(ThinkingEffort)
+
+    /// Thinking effort levels
+    enum ThinkingEffort: String, Codable, Sendable {
+        case high
+        case medium
+        case low
+    }
+}
+
+extension ThinkingMode: Codable {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+
+        // Try to decode as boolean first
+        if let boolValue = try? container.decode(Bool.self) {
+            self = boolValue ? .enabled : .disabled
+            return
+        }
+
+        // Try to decode as string (effort level)
+        if let stringValue = try? container.decode(String.self) {
+            if let effort = ThinkingEffort(rawValue: stringValue) {
+                self = .effort(effort)
+            } else if stringValue == "true" {
+                self = .enabled
+            } else {
+                self = .disabled
+            }
+            return
+        }
+
+        self = .disabled
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .enabled:
+            try container.encode(true)
+        case .disabled:
+            try container.encode(false)
+        case .effort(let level):
+            try container.encode(level.rawValue)
+        }
+    }
+}
+
 // MARK: - Chat API Types (Internal - for Ollama API communication)
 
 /// Request for /api/chat endpoint
@@ -82,6 +142,9 @@ struct ChatRequest: Codable, Sendable {
     let format: ResponseFormat?
     let keepAlive: String?
     let tools: [Tool]?
+    /// Controls thinking output separation.
+    /// When enabled, Ollama server parses `<think>` tags and separates thinking from content.
+    let think: ThinkingMode?
 
     init(
         model: String,
@@ -90,7 +153,8 @@ struct ChatRequest: Codable, Sendable {
         options: OllamaOptions? = nil,
         format: ResponseFormat? = nil,
         keepAlive: String? = nil,
-        tools: [Tool]? = nil
+        tools: [Tool]? = nil,
+        think: ThinkingMode? = nil
     ) {
         self.model = model
         self.messages = messages
@@ -99,10 +163,11 @@ struct ChatRequest: Codable, Sendable {
         self.format = format
         self.keepAlive = keepAlive
         self.tools = tools
+        self.think = think
     }
 
     enum CodingKeys: String, CodingKey {
-        case model, messages, stream, options, format, tools
+        case model, messages, stream, options, format, tools, think
         case keepAlive = "keep_alive"
     }
 }

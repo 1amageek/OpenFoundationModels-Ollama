@@ -86,7 +86,8 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
             options: finalOptions?.toOllamaOptions(),
             format: finalResponseFormat,
             keepAlive: configuration.keepAlive,
-            tools: toolDefinitions
+            tools: toolDefinitions,
+            think: isGptOssModel ? .enabled : nil
         )
         
         let response: ChatResponse = try await httpClient.send(request, to: "/api/chat")
@@ -135,7 +136,7 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
                     
                     // Use the options from the transcript if not provided
                     let finalOptions = options ?? TranscriptConverter.extractOptions(from: transcript)
-                    
+
                     let request = ChatRequest(
                         model: modelName,
                         messages: messages,
@@ -143,7 +144,8 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
                         options: finalOptions?.toOllamaOptions(),
                         format: finalResponseFormat,
                         keepAlive: configuration.keepAlive,
-                        tools: tools
+                        tools: tools,
+                        think: isGptOssModel ? .enabled : nil
                     )
                     
                     let streamResponse: AsyncThrowingStream<ChatResponse, Error> = await httpClient.stream(request, to: "/api/chat")
