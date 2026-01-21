@@ -45,7 +45,8 @@ struct ChatRequestBuilder: Sendable {
         // Process response format according to model strategy
         let finalResponseFormat = modelStrategy.processResponseFormat(
             format: responseFormat,
-            messages: &messages
+            messages: &messages,
+            harmonyInstructions: configuration.harmonyInstructions
         )
 
         // Use transcript options if not provided

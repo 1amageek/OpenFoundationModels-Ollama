@@ -47,17 +47,19 @@ enum ModelStrategy: Sendable {
     /// - Parameters:
     ///   - format: The original response format (may be nil)
     ///   - messages: The messages array to potentially modify
+    ///   - harmonyInstructions: Harmony instructions template with placeholders
     /// - Returns: The response format to use in the API request (may be nil for gpt-oss)
     func processResponseFormat(
         format: ResponseFormat?,
-        messages: inout [Message]
+        messages: inout [Message],
+        harmonyInstructions: String = OllamaConfiguration.defaultHarmonyInstructions
     ) -> ResponseFormat? {
         guard let format = format else { return nil }
 
         switch self {
         case .gptOss:
             // For gpt-oss models, add Response Formats to system message instead of using format parameter
-            addHarmonyResponseFormat(to: &messages, format: format)
+            addHarmonyResponseFormat(to: &messages, format: format, instructions: harmonyInstructions)
             return nil
         case .standard:
             // For other models, use format parameter and add user instructions
@@ -69,12 +71,12 @@ enum ModelStrategy: Sendable {
     // MARK: - Private Helper Methods
 
     /// Add harmony response format to system message for gpt-oss models
-    private func addHarmonyResponseFormat(to messages: inout [Message], format: ResponseFormat) {
+    private func addHarmonyResponseFormat(to messages: inout [Message], format: ResponseFormat, instructions: String) {
         // Find system message and add Response Formats section
         for i in 0..<messages.count {
             if messages[i].role == .system {
                 let currentContent = messages[i].content
-                let harmonyFormat = generateHarmonyResponseFormat(format: format)
+                let harmonyFormat = generateHarmonyResponseFormat(format: format, instructions: instructions)
 
                 // Add Response Formats section to system message
                 let newContent = currentContent + "\n\n" + harmonyFormat
@@ -91,54 +93,49 @@ enum ModelStrategy: Sendable {
         }
 
         // If no system message exists, create one with the harmony format
-        let harmonyFormat = generateHarmonyResponseFormat(format: format)
+        let harmonyFormat = generateHarmonyResponseFormat(format: format, instructions: instructions)
         let systemMessage = Message(role: .system, content: harmonyFormat)
         messages.insert(systemMessage, at: 0)
     }
 
     /// Generate harmony response format string
-    private func generateHarmonyResponseFormat(format: ResponseFormat) -> String {
+    /// - Parameters:
+    ///   - format: The response format
+    ///   - instructions: Instructions template with placeholders
+    /// - Returns: The formatted harmony instructions
+    ///
+    /// Supported placeholders:
+    /// - `{{schema}}`: JSON schema string
+    /// - `{{properties}}`: Comma-separated property names
+    private func generateHarmonyResponseFormat(format: ResponseFormat, instructions: String) -> String {
         switch format {
         case .jsonSchema(let container):
-            var harmonyFormat = "# Response Formats\n\n## StructuredResponse\n\n"
-
+            // Generate schema string
+            let schemaString: String
             if let jsonData = try? JSONSerialization.data(withJSONObject: container.schema, options: []),
-               let schemaString = String(data: jsonData, encoding: .utf8) {
-                harmonyFormat += schemaString
+               let str = String(data: jsonData, encoding: .utf8) {
+                schemaString = str
             } else {
-                // Fallback schema
-                harmonyFormat += #"{"type":"object","properties":{}}"#
+                schemaString = #"{"type":"object","properties":{}}"#
             }
 
-            // Add explicit instructions for JSON output
-            harmonyFormat += """
+            // Extract property names from schema
+            var propertyNames: [String] = []
+            if let properties = container.schema["properties"] as? [String: Any] {
+                propertyNames = Array(properties.keys)
+            }
+            let propertiesString = propertyNames.joined(separator: ", ")
 
-
-            # Output Instructions
-
-            - You MUST output valid JSON only. No markdown, no code fences, no prose.
-            - Output the JSON directly in your response content, NOT in thinking.
-            - The JSON must conform exactly to the StructuredResponse schema above.
-            - Do not include any text before or after the JSON object.
-            """
-
-            return harmonyFormat
+            // Apply placeholders to instructions template
+            return instructions
+                .replacingOccurrences(of: "{{schema}}", with: schemaString)
+                .replacingOccurrences(of: "{{properties}}", with: propertiesString)
 
         case .json:
-            // Simple JSON format for harmony
-            return """
-            # Response Formats
-
-            ## JSONResponse
-
-            {"type":"object","description":"JSON response format"}
-
-            # Output Instructions
-
-            - You MUST output valid JSON only. No markdown, no code fences, no prose.
-            - Output the JSON directly in your response content, NOT in thinking.
-            - Do not include any text before or after the JSON object.
-            """
+            // Simple JSON mode
+            return instructions
+                .replacingOccurrences(of: "{{schema}}", with: #"{"type":"object","description":"JSON response format"}"#)
+                .replacingOccurrences(of: "{{properties}}", with: "")
 
         case .text:
             return ""
