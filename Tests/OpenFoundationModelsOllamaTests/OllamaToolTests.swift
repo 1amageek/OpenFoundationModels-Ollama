@@ -6,7 +6,7 @@ import OpenFoundationModelsCore
 
 // TestSkip is defined in OllamaLanguageModelTests.swift
 
-@Suite("Ollama Tool Calling Tests")
+@Suite("Ollama Tool Calling Tests", .serialized)
 struct OllamaToolTests {
     
     // MARK: - Test Configuration
@@ -376,7 +376,6 @@ struct OllamaToolTests {
     // MARK: - Integration Tests (requires Ollama running)
     
     @Test("Basic generate test")
-    @available(macOS 13.0, iOS 16.0, *)
     func testBasicGenerate() async throws {
         try await TestUtilities.checkPreconditions(modelName: defaultModel)
         
@@ -401,7 +400,6 @@ struct OllamaToolTests {
     }
     
     @Test("Basic stream test")
-    @available(macOS 13.0, iOS 16.0, *)
     func testBasicStream() async throws {
         try await TestUtilities.checkPreconditions(modelName: defaultModel)
         

@@ -3,6 +3,17 @@ import OpenFoundationModels
 import OpenFoundationModelsCore
 
 /// Session for streaming Generable responses with automatic retry
+///
+/// ## @unchecked Sendable Justification
+/// This class is marked `@unchecked Sendable` because:
+/// - All properties are immutable (`let`)
+/// - `model: OllamaLanguageModel` - Sendable
+/// - `options: GenerableStreamOptions` - Sendable
+/// - `parser: GenerableParser<T>` - Sendable
+/// - `baseTranscript: Transcript` - Sendable
+/// - `originalPrompt: String` - Sendable
+/// - No mutable state after initialization
+/// - Thread-safe access is guaranteed by immutability
 public final class GenerableStreamSession<T: Generable & Sendable & Decodable>: @unchecked Sendable {
     /// The language model to use
     private let model: OllamaLanguageModel

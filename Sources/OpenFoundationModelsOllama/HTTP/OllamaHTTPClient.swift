@@ -72,10 +72,17 @@ public actor OllamaHTTPClient {
             }
             
             if httpResponse.statusCode >= 400 {
-                if let errorResponse = try? decoder.decode(ErrorResponse.self, from: data) {
+                do {
+                    let errorResponse = try decoder.decode(ErrorResponse.self, from: data)
                     throw errorResponse
+                } catch is DecodingError {
+                    #if DEBUG
+                    if let responseText = String(data: data, encoding: .utf8) {
+                        print("[OllamaHTTPClient] Failed to decode error response: \(responseText)")
+                    }
+                    #endif
+                    throw OllamaHTTPError.statusError(httpResponse.statusCode, data)
                 }
-                throw OllamaHTTPError.statusError(httpResponse.statusCode, data)
             }
             
             
@@ -123,10 +130,16 @@ public actor OllamaHTTPClient {
                         for try await byte in asyncBytes {
                             errorData.append(byte)
                         }
-                        
-                        if let errorResponse = try? decoder.decode(ErrorResponse.self, from: errorData) {
+
+                        do {
+                            let errorResponse = try decoder.decode(ErrorResponse.self, from: errorData)
                             continuation.finish(throwing: errorResponse)
-                        } else {
+                        } catch is DecodingError {
+                            #if DEBUG
+                            if let responseText = String(data: errorData, encoding: .utf8) {
+                                print("[OllamaHTTPClient] Failed to decode streaming error response: \(responseText)")
+                            }
+                            #endif
                             continuation.finish(throwing: OllamaHTTPError.statusError(httpResponse.statusCode, errorData))
                         }
                         return

@@ -4,7 +4,7 @@ import Foundation
 @testable import OpenFoundationModels
 @testable import OpenFoundationModelsCore
 
-@Suite("Transcript-based Ollama Tests")
+@Suite("Transcript-based Ollama Tests", .serialized)
 struct TranscriptTests {
     
     // MARK: - Test Configuration
@@ -132,7 +132,6 @@ struct TranscriptTests {
     // MARK: - Integration Tests (requires Ollama running)
     
     @Test("Generate with transcript")
-    @available(macOS 13.0, iOS 16.0, *)
     func testGenerateWithTranscript() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running")
@@ -177,7 +176,6 @@ struct TranscriptTests {
     }
     
     @Test("Stream with transcript")
-    @available(macOS 13.0, iOS 16.0, *)
     func testStreamWithTranscript() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running")
@@ -226,7 +224,6 @@ struct TranscriptTests {
     }
     
     @Test("Generate with tools in transcript")
-    @available(macOS 13.0, iOS 16.0, *)
     func testGenerateWithToolsInTranscript() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running")

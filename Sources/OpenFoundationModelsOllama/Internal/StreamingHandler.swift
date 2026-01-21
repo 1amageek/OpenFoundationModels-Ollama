@@ -46,7 +46,12 @@ internal actor AdvancedStreamingHandler {
                 let object = try decoder.decode(T.self, from: lineData)
                 results.append(object)
             } catch {
-                // Skip malformed lines silently
+                // Skip malformed lines but log in DEBUG builds for troubleshooting
+                #if DEBUG
+                if let lineString = String(data: lineData, encoding: .utf8) {
+                    print("[StreamingHandler] Skipping malformed JSON line: \(lineString), error: \(error)")
+                }
+                #endif
             }
         }
         

@@ -123,9 +123,14 @@ public struct GenerableParser<T: Generable & Sendable & Decodable>: Sendable {
         ]
 
         for (pattern, replacement) in patterns {
-            if let regex = try? NSRegularExpression(pattern: pattern) {
+            do {
+                let regex = try NSRegularExpression(pattern: pattern)
                 let range = NSRange(result.startIndex..., in: result)
                 result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
+            } catch {
+                #if DEBUG
+                print("[GenerableParser] Failed to compile regex pattern '\(pattern)': \(error)")
+                #endif
             }
         }
 
@@ -156,7 +161,13 @@ public struct GenerableParser<T: Generable & Sendable & Decodable>: Sendable {
     /// Fix unquoted keys in JSON objects
     private func fixUnquotedKeys(_ content: String) -> String {
         // Pattern: unquoted word followed by colon
-        guard let regex = try? NSRegularExpression(pattern: "([{,]\\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\\s*:)") else {
+        let regex: NSRegularExpression
+        do {
+            regex = try NSRegularExpression(pattern: "([{,]\\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\\s*:)")
+        } catch {
+            #if DEBUG
+            print("[GenerableParser] Failed to compile unquoted keys regex: \(error)")
+            #endif
             return content
         }
 
@@ -231,8 +242,21 @@ public struct GenerableParser<T: Generable & Sendable & Decodable>: Sendable {
         var errors: [ValidationError] = []
 
         // Encode schema to get its structure
-        guard let schemaData = try? JSONEncoder().encode(schema),
-              let schemaDict = try? JSONSerialization.jsonObject(with: schemaData) as? [String: Any] else {
+        let schemaData: Data
+        let schemaDict: [String: Any]
+        do {
+            schemaData = try JSONEncoder().encode(schema)
+            guard let dict = try JSONSerialization.jsonObject(with: schemaData) as? [String: Any] else {
+                #if DEBUG
+                print("[GenerableParser] Schema JSON is not a dictionary")
+                #endif
+                return errors
+            }
+            schemaDict = dict
+        } catch {
+            #if DEBUG
+            print("[GenerableParser] Failed to encode schema: \(error)")
+            #endif
             return errors
         }
 

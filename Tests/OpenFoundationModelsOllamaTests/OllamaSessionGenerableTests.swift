@@ -125,7 +125,6 @@ struct OllamaSessionGenerableTests {
 
     // Optional: Direct provider call to measure structured decoding without Session
     @Test("Direct generate(transcript:) JSON → Product conversion (x20)")
-    @available(macOS 13.0, iOS 16.0, *)
     func testDirectGenerateFiveTrials() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running at \(baseURL)")

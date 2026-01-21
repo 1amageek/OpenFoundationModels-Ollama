@@ -4,7 +4,7 @@ import Foundation
 @testable import OpenFoundationModels
 import OpenFoundationModelsCore
 
-@Suite("Generable Stream Tests")
+@Suite("Generable Stream Tests", .serialized)
 struct GenerableStreamTests {
 
     // MARK: - Test Types

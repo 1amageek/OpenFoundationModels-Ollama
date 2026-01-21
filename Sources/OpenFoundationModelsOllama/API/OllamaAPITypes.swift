@@ -322,6 +322,16 @@ struct Tool: Codable, Sendable {
             }
 
             /// Box type for indirect storage (enables recursive types in structs)
+            ///
+            /// ## @unchecked Sendable Justification
+            /// This class is marked `@unchecked Sendable` because:
+            /// - It is a `final class` (cannot be subclassed)
+            /// - The only property `value` is immutable (`let`)
+            /// - The wrapped type `T` is constrained to `Sendable`
+            /// - All state is effectively immutable after initialization
+            ///
+            /// This provides value-semantic behavior through a reference type,
+            /// which is necessary to break the recursive cycle in JSON schema types.
             final class Box<T: Codable & Sendable>: Codable, @unchecked Sendable {
                 let value: T
 
@@ -653,15 +663,87 @@ public struct OllamaOptions: Codable, Sendable {
 
 // MARK: - Response Format
 
-/// Response format specification
-public enum ResponseFormat: Codable, @unchecked Sendable {
-    case text
-    case json
-    case jsonSchema([String: Any])
-    
+/// Sendable container for JSON Schema data
+///
+/// This struct stores the JSON schema as serialized Data, making it safe to share
+/// across concurrent contexts. The schema dictionary is reconstructed on access.
+/// This approach avoids using `@unchecked Sendable` with `[String: Any]`.
+public struct JSONSchemaContainer: Codable, Sendable, Equatable {
+    /// Serialized JSON data (Sendable)
+    private let data: Data
+
+    /// Create a container from a dictionary
+    public init(_ dictionary: [String: Any]) {
+        if let jsonData = try? JSONSerialization.data(withJSONObject: dictionary, options: [.sortedKeys]) {
+            self.data = jsonData
+        } else {
+            #if DEBUG
+            print("[JSONSchemaContainer] Failed to serialize schema dictionary")
+            #endif
+            self.data = Data()
+        }
+    }
+
+    /// Access the schema as a dictionary
+    /// - Note: This reconstructs the dictionary from serialized data
+    public var schema: [String: Any] {
+        guard !data.isEmpty else { return [:] }
+        do {
+            if let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return dict
+            }
+        } catch {
+            #if DEBUG
+            print("[JSONSchemaContainer] Failed to deserialize schema: \(error)")
+            #endif
+        }
+        return [:]
+    }
+
+    // MARK: - Codable
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        
+        let anyCodable = try container.decode(AnyCodable.self)
+        if let dict = anyCodable.value as? [String: Any] {
+            self.init(dict)
+        } else {
+            // Empty schema case
+            self.init([:])
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        let anyCodable = AnyCodable(schema)
+        try container.encode(anyCodable)
+    }
+
+    // MARK: - Equatable
+
+    public static func == (lhs: JSONSchemaContainer, rhs: JSONSchemaContainer) -> Bool {
+        lhs.data == rhs.data
+    }
+}
+
+/// Response format specification
+///
+/// This enum is now fully Sendable without using `@unchecked Sendable`.
+/// The `.jsonSchema` case uses `JSONSchemaContainer` which stores data as
+/// serialized bytes rather than `[String: Any]`.
+public enum ResponseFormat: Codable, Sendable, Equatable {
+    case text
+    case json
+    case jsonSchema(JSONSchemaContainer)
+
+    /// Convenience initializer for creating jsonSchema from dictionary
+    public static func jsonSchema(_ dictionary: [String: Any]) -> ResponseFormat {
+        .jsonSchema(JSONSchemaContainer(dictionary))
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+
         // Try to decode as string first
         if let value = try? container.decode(String.self) {
             switch value {
@@ -672,15 +754,14 @@ public enum ResponseFormat: Codable, @unchecked Sendable {
             default:
                 self = .text
             }
-        } else if let dict = try? container.decode(AnyCodable.self),
-                  let schemaDict = dict.value as? [String: Any] {
+        } else if let schemaContainer = try? container.decode(JSONSchemaContainer.self) {
             // Decode as JSON Schema object
-            self = .jsonSchema(schemaDict)
+            self = .jsonSchema(schemaContainer)
         } else {
             self = .text
         }
     }
-    
+
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
@@ -688,10 +769,9 @@ public enum ResponseFormat: Codable, @unchecked Sendable {
             try container.encode("text")
         case .json:
             try container.encode("json")
-        case .jsonSchema(let schema):
+        case .jsonSchema(let schemaContainer):
             // Encode JSON Schema object directly
-            let anyCodable = AnyCodable(schema)
-            try container.encode(anyCodable)
+            try container.encode(schemaContainer)
         }
     }
 }

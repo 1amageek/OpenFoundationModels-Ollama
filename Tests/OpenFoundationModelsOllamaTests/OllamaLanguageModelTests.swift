@@ -30,8 +30,8 @@ struct OllamaLanguageModelTests {
     }
     
     @Test("Configuration with host and port")
-    func testConfigurationWithHostPort() {
-        let config = OllamaConfiguration.create(
+    func testConfigurationWithHostPort() throws {
+        let config = try OllamaConfiguration.create(
             host: "myserver",
             port: 8080,
             timeout: 60.0
@@ -218,7 +218,7 @@ struct OllamaLanguageModelTests {
 
 // MARK: - Integration Tests (requires Ollama running)
 
-@Suite("Ollama Integration Tests")
+@Suite("Ollama Integration Tests", .serialized)
 struct OllamaIntegrationTests {
     
     private let defaultModel = "gpt-oss:20b"
@@ -237,7 +237,6 @@ struct OllamaIntegrationTests {
     }
     
     @Test("Check model availability")
-    @available(macOS 13.0, iOS 16.0, *)
     func testModelAvailability() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running")
@@ -251,7 +250,6 @@ struct OllamaIntegrationTests {
     }
     
     @Test("List available models")
-    @available(macOS 13.0, iOS 16.0, *)
     func testListModels() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running")

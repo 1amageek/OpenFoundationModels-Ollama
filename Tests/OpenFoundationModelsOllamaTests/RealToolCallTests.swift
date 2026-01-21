@@ -22,7 +22,6 @@ struct RealToolCallTests {
     }
     
     @Test("Real weather tool call with GenerationSchema")
-    @available(macOS 13.0, iOS 16.0, *)
     func testRealWeatherToolCall() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running")
@@ -84,7 +83,6 @@ struct RealToolCallTests {
     }
     
     @Test("Real calculation tool call")
-    @available(macOS 13.0, iOS 16.0, *)
     func testRealCalculationToolCall() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running")
@@ -206,7 +204,6 @@ struct RealToolCallTests {
     }
     
     @Test("Multiple tools real test")
-    @available(macOS 13.0, iOS 16.0, *)
     func testMultipleToolsReal() async throws {
         guard await isOllamaAvailable else {
             throw TestSkip(reason: "Ollama is not running")

@@ -84,11 +84,12 @@ struct ResponseFormatTests {
         #expect(format != nil)
         
         // Verify we get the full JSON schema
-        if case .jsonSchema(let schema) = format {
+        if case .jsonSchema(let container) = format {
+            let schema = container.schema
             // Verify WeatherResponse schema structure
             #expect(schema["type"] as? String == "object")
             #expect(schema["description"] != nil)
-            
+
             if let properties = schema["properties"] as? [String: Any] {
                 // Check for WeatherResponse fields
                 #expect(properties["temperature"] != nil)
@@ -217,7 +218,8 @@ struct ResponseFormatTests {
         let decoder = JSONDecoder()
         let decoded = try decoder.decode(ResponseFormat.self, from: encoded)
         
-        if case .jsonSchema(let decodedSchema) = decoded {
+        if case .jsonSchema(let container) = decoded {
+            let decodedSchema = container.schema
             #expect(decodedSchema["type"] as? String == "object")
             #expect(decodedSchema["properties"] != nil)
             #expect(decodedSchema["required"] != nil)
@@ -247,16 +249,17 @@ struct ResponseFormatTests {
         
         #expect(format != nil)
         
-        if case .jsonSchema(let schema) = format {
+        if case .jsonSchema(let container) = format {
+            let schema = container.schema
             print("\n=== Extracted Schema for TodoList ===")
             if let jsonData = try? JSONSerialization.data(withJSONObject: schema, options: .prettyPrinted),
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 print(jsonString)
             }
-            
+
             // Verify TodoList schema structure
             #expect(schema["type"] as? String == "object")
-            
+
             if let properties = schema["properties"] as? [String: Any] {
                 #expect(properties["todos"] != nil)
                 
@@ -388,7 +391,8 @@ struct ResponseFormatTests {
         let extractedFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
         var messages = TranscriptConverter.buildMessages(from: transcript)
         
-        if case .jsonSchema(let schema) = extractedFormat {
+        if case .jsonSchema(let container) = extractedFormat {
+            let schema = container.schema
             print("Extracted schema:")
             if let jsonData = try? JSONSerialization.data(withJSONObject: schema, options: .prettyPrinted),
                let jsonString = String(data: jsonData, encoding: .utf8) {
@@ -587,7 +591,8 @@ struct ResponseFormatTests {
         // Extract and verify schema
         let format = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
         
-        if case .jsonSchema(let schema) = format {
+        if case .jsonSchema(let container) = format {
+            let schema = container.schema
             print("\n=== Complex Nested Schema (TodoList) ===")
             if let jsonData = try? JSONSerialization.data(withJSONObject: schema, options: .prettyPrinted),
                let jsonString = String(data: jsonData, encoding: .utf8) {
