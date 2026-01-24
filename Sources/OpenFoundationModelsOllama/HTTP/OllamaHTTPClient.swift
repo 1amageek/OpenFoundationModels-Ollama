@@ -61,9 +61,19 @@ public actor OllamaHTTPClient {
             
             if !(request is EmptyRequest) {
                 urlRequest.httpBody = try encoder.encode(request)
+                #if DEBUG
+                // Debug: print the request body to verify think parameter is included
+                if endpoint == "/api/chat",
+                   let jsonData = urlRequest.httpBody,
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    // Only print first 500 chars to avoid log spam
+                    let preview = jsonString.prefix(500)
+                    print("[OllamaHTTPClient] Request body preview: \(preview)...")
+                }
+                #endif
             }
         }
-        
+
         do {
             let (data, response) = try await session.data(for: urlRequest)
             
@@ -85,7 +95,15 @@ public actor OllamaHTTPClient {
                 }
             }
             
-            
+
+            #if DEBUG
+            // Debug: print response to see if thinking is separated
+            if endpoint == "/api/chat",
+               let jsonString = String(data: data, encoding: .utf8) {
+                let preview = jsonString.prefix(500)
+                print("[OllamaHTTPClient] Response preview: \(preview)...")
+            }
+            #endif
             return try decoder.decode(Response.self, from: data)
         } catch let error as URLError {
             if error.code == .notConnectedToInternet || error.code == .cannotConnectToHost {

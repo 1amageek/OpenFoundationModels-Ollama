@@ -22,10 +22,15 @@ enum ModelStrategy: Sendable {
     // MARK: - Thinking Mode
 
     /// The thinking mode to use for this model strategy
+    ///
+    /// Note: Different models require different think parameter formats:
+    /// - Standard models (qwen3, etc.): boolean (`true`/`false`)
+    /// - GPT-OSS models: string (`"low"`/`"medium"`/`"high"`)
     var thinkingMode: ThinkingMode? {
         switch self {
         case .gptOss:
-            return .enabled
+            // GPT-OSS requires effort level string, not boolean
+            return .effort(.medium)
         case .standard:
             return nil
         }

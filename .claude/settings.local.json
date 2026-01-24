@@ -25,7 +25,8 @@
       "Bash(cp:*)",
       "WebFetch(domain:cookbook.openai.com)",
       "Bash(tree:*)",
-      "Bash(time swift test:*)"
+      "Bash(time swift test:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }
