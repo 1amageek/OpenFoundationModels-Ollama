@@ -11,7 +11,14 @@ public struct TestConfiguration {
     // Alternative models for testing
     public static let alternativeModels = [
         "gpt-oss:120b",
-        "gemma3n:latest"
+        "gemma3n:latest",
+        "lfm2.5-thinking:latest"
+    ]
+
+    // Models with thinking capability
+    public static let thinkingModels = [
+        "lfm2.5-thinking:latest",
+        "glm-4.7-flash:latest"
     ]
     
     // Timeout configurations

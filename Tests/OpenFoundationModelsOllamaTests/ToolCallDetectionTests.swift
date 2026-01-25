@@ -5,7 +5,7 @@ import Foundation
 
 @Suite("Tool Call Detection Tests", .serialized)
 struct ToolCallDetectionTests {
-    
+
     @Test("OllamaLanguageModel returns tool calls as Transcript.Entry")
     func testToolCallDetection() async throws {
         // Create a mock HTTP client that returns tool calls
@@ -32,38 +32,31 @@ struct ToolCallDetectionTests {
             evalCount: nil,
             evalDuration: nil
         )
-        
-        // This test verifies the structure is correct
-        // In a real test, we would mock the HTTP client
+
         #expect(mockResponse.message?.toolCalls?.count == 1)
         #expect(mockResponse.message?.toolCalls?.first?.function.name == "get_weather")
     }
-    
+
     @Test("Transcript.Entry.toolCalls creation")
     func testToolCallsEntryCreation() throws {
-        // Create tool call arguments
         let arguments = GeneratedContent(properties: [
             "city": "Tokyo",
             "units": "celsius"
         ])
-        
-        // Create a tool call
+
         let toolCall = Transcript.ToolCall(
             id: "call-1",
             toolName: "get_weather",
             arguments: arguments
         )
-        
-        // Create tool calls entry
+
         let toolCalls = Transcript.ToolCalls(
             id: "calls-1",
             [toolCall]
         )
-        
-        // Create the entry
+
         let entry = Transcript.Entry.toolCalls(toolCalls)
-        
-        // Verify the entry
+
         if case .toolCalls(let calls) = entry {
             #expect(calls.count == 1)
             #expect(calls.first?.toolName == "get_weather")
@@ -71,17 +64,13 @@ struct ToolCallDetectionTests {
             Issue.record("Expected toolCalls entry")
         }
     }
-    
-    @Test("Generate method returns tool calls when Ollama responds with tool calls")
+
+    @Test("Generate method returns tool calls when Ollama responds with tool calls", .timeLimit(.minutes(1)))
     func testGenerateReturnsToolCalls() async throws {
-        // Skip if Ollama is not available
-        guard await isOllamaAvailable() else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: "gpt-oss:20b")
-        
-        // Create a transcript with tool definitions
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
+
         let weatherTool = Transcript.ToolDefinition(
             name: "get_weather",
             description: "Get weather for a city",
@@ -91,7 +80,7 @@ struct ToolCallDetectionTests {
                 properties: []
             )
         )
-        
+
         let transcript = Transcript(entries: [
             .instructions(Transcript.Instructions(
                 id: "inst-1",
@@ -111,31 +100,17 @@ struct ToolCallDetectionTests {
                 responseFormat: nil
             ))
         ])
-        
-        // Generate response
+
         let entry = try await model.generate(transcript: transcript, options: nil)
-        
-        // The entry should be either tool calls or a response
+
         switch entry {
         case .toolCalls(let toolCalls):
             print("Model returned tool calls: \(toolCalls.count) calls")
             #expect(toolCalls.count > 0)
         case .response(let response):
             print("Model returned direct response: \(response.segments)")
-            // This is also acceptable - model might not always use tools
         default:
             Issue.record("Unexpected entry type: \(entry)")
-        }
-    }
-    
-    private func isOllamaAvailable() async -> Bool {
-        do {
-            let config = OllamaConfiguration()
-            let httpClient = OllamaHTTPClient(configuration: config)
-            let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-            return true
-        } catch {
-            return false
         }
     }
 }

@@ -59,16 +59,11 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
             streaming: false
         )
 
+        // Send request directly (Message self-normalizes during decoding)
         let response: ChatResponse = try await httpClient.send(buildResult.request, to: "/api/chat")
 
-        // Check for tool calls
-        if let toolCalls = response.message?.toolCalls,
-           !toolCalls.isEmpty {
-            return createToolCallsEntry(from: toolCalls)
-        }
-
-        // Convert response to Transcript.Entry
-        return createResponseEntry(from: response)
+        // Convert ChatResponse to Transcript.Entry
+        return createEntry(from: response)
     }
 
     public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncThrowingStream<Transcript.Entry, Error> {
@@ -88,73 +83,99 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
                     let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
                         ?? TranscriptConverter.extractResponseFormat(from: transcript)
 
-                    let streamResponse: AsyncThrowingStream<ChatResponse, Error> = await self.httpClient.stream(
+                    // Stream raw responses
+                    let rawStream: AsyncThrowingStream<ChatResponse, Error> = await self.httpClient.stream(
                         buildResult.request,
                         to: "/api/chat"
                     )
 
-                    var accumulatedToolCalls: [ToolCall] = []
                     var hasYieldedContent = false
-                    var accumulatedThinking = ""  // Track thinking content for gpt-oss
-                    var accumulatedContent = ""   // Track actual content
+                    var hasYieldedToolCalls = false
+                    var accumulatedContent = ""
+                    var accumulatedThinking = ""
+                    var nativeToolCalls: [ToolCall] = []
 
-                    for try await chunk in streamResponse {
-                        // Process content field (this is what should be shown to user)
+                    for try await chunk in rawStream {
+                        // Accumulate content for text-based tool call extraction
                         if let content = chunk.message?.content, !content.isEmpty {
                             accumulatedContent += content
-                            let entry = self.createResponseEntry(content: content)
-                            continuation.yield(entry)
-                            hasYieldedContent = true
+
+                            // Yield content incrementally (only if no tool call patterns detected yet)
+                            if !chunk.done && !TextToolCallParser.containsToolCallPatterns(accumulatedContent) {
+                                let entry = self.createResponseEntry(content: content)
+                                continuation.yield(entry)
+                                hasYieldedContent = true
+                            }
                         }
 
-                        // Track thinking field (for gpt-oss models) but don't yield it
+                        // Accumulate thinking content
                         if let thinking = chunk.message?.thinking, !thinking.isEmpty {
                             accumulatedThinking += thinking
                         }
 
-                        // Accumulate tool calls (these typically come all at once)
+                        // Accumulate native tool calls
                         if let toolCalls = chunk.message?.toolCalls {
-                            accumulatedToolCalls.append(contentsOf: toolCalls)
+                            nativeToolCalls.append(contentsOf: toolCalls)
                         }
 
-                        // Check if streaming is complete
+                        // Debug: log thinking content for gpt-oss models
+                        #if DEBUG
+                        if modelStrategy.usesHarmonyFormat, let thinking = chunk.message?.thinking, !thinking.isEmpty {
+                            print("[thinking]: \(thinking)")
+                        }
+                        #endif
+
+                        // On stream completion
                         if chunk.done {
-                            // For gpt-oss models, we don't show thinking to users
-                            // Only use it if no content is available at the end
-                            #if DEBUG
-                            if modelStrategy.usesHarmonyFormat && !accumulatedThinking.isEmpty {
-                                print("[thinking]: \(accumulatedThinking)")
-                            }
-                            #endif
+                            // Extract tool calls: prefer native, fallback to text-based
+                            let finalToolCalls: [ToolCall]
+                            let finalContent: String
 
-                            // If we accumulated tool calls, yield them
-                            if !accumulatedToolCalls.isEmpty {
-                                let entry = self.createToolCallsEntry(from: accumulatedToolCalls)
+                            if !nativeToolCalls.isEmpty {
+                                finalToolCalls = nativeToolCalls
+                                finalContent = accumulatedContent
+                            } else if TextToolCallParser.containsToolCallPatterns(accumulatedContent) {
+                                let parseResult = TextToolCallParser.parse(accumulatedContent)
+                                finalToolCalls = parseResult.toolCalls
+                                finalContent = parseResult.remainingContent
+                            } else if TextToolCallParser.containsToolCallPatterns(accumulatedThinking) {
+                                // GLM models: tool calls in thinking field
+                                let parseResult = TextToolCallParser.parse(accumulatedThinking)
+                                finalToolCalls = parseResult.toolCalls
+                                finalContent = accumulatedContent
+                            } else {
+                                finalToolCalls = []
+                                finalContent = accumulatedContent
+                            }
+
+                            // Yield tool calls if present
+                            if !finalToolCalls.isEmpty && !hasYieldedToolCalls {
+                                let entry = self.createToolCallsEntry(from: finalToolCalls)
                                 continuation.yield(entry)
+                                hasYieldedToolCalls = true
                             }
 
-                            // Handle gpt-oss case where content is empty but thinking has content
-                            if !hasYieldedContent && accumulatedToolCalls.isEmpty {
-                                if modelStrategy.usesHarmonyFormat && !accumulatedThinking.isEmpty && accumulatedContent.isEmpty {
+                            // Handle empty response case (gpt-oss fallback)
+                            if !hasYieldedContent && !hasYieldedToolCalls {
+                                if modelStrategy.usesHarmonyFormat && !accumulatedThinking.isEmpty && finalContent.isEmpty {
                                     // For gpt-oss with ResponseFormat, generate default JSON
                                     if let format = responseFormat {
                                         let defaultJSON = self.requestBuilder.generateDefaultJSON(for: format)
                                         let entry = self.createResponseEntry(content: defaultJSON)
                                         continuation.yield(entry)
                                     } else {
-                                        // No format specified, yield empty to avoid hanging
                                         let entry = self.createResponseEntry(content: "")
                                         continuation.yield(entry)
                                     }
+                                } else if !finalContent.isEmpty {
+                                    // Final content that wasn't yielded yet
+                                    let entry = self.createResponseEntry(content: finalContent)
+                                    continuation.yield(entry)
                                 } else {
-                                    // Regular empty response case
                                     let entry = self.createResponseEntry(content: "")
                                     continuation.yield(entry)
                                 }
                             }
-
-                            continuation.finish()
-                            return
                         }
                     }
 
@@ -173,10 +194,18 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
 
     // MARK: - Private Helper Methods
 
-    /// Create response entry from ChatResponse
-    internal func createResponseEntry(from response: ChatResponse) -> Transcript.Entry {
-        // Check both content and thinking fields (some models use thinking instead of content)
-        let content = response.message?.content ?? response.message?.thinking ?? ""
+    /// Create Transcript.Entry from ChatResponse
+    private func createEntry(from response: ChatResponse) -> Transcript.Entry {
+        guard let message = response.message else {
+            return createResponseEntry(content: "")
+        }
+
+        if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+            return createToolCallsEntry(from: toolCalls)
+        }
+
+        // Use content, fallback to thinking if content is empty
+        let content = message.content.isEmpty ? (message.thinking ?? "") : message.content
         return createResponseEntry(content: content)
     }
 
@@ -202,11 +231,9 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
                 print("[OllamaLanguageModel] Failed to create GeneratedContent from tool arguments: \(error)")
                 #endif
                 // Create empty GeneratedContent without force unwrap
-                // The json initializer should always succeed for "{}"
                 if let emptyContent = try? GeneratedContent(json: "{}") {
                     argumentsContent = emptyContent
                 } else {
-                    // This should never happen, but provide a safe fallback
                     let emptyKeyValuePairs: KeyValuePairs<String, any ConvertibleToGeneratedContent> = [:]
                     argumentsContent = GeneratedContent(properties: emptyKeyValuePairs)
                 }

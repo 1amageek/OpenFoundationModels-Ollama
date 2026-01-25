@@ -6,22 +6,7 @@ import OpenFoundationModelsCore
 
 @Suite("@Generable Macro Tool Tests", .serialized)
 struct GenerableToolTests {
-    
-    private let defaultModel = "gpt-oss:20b"
-    
-    private var isOllamaAvailable: Bool {
-        get async {
-            do {
-                let config = OllamaConfiguration()
-                let httpClient = OllamaHTTPClient(configuration: config)
-                let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-                return true
-            } catch {
-                return false
-            }
-        }
-    }
-    
+
     // MARK: - Test Types with @Generable
     
     @Generable
@@ -204,17 +189,11 @@ struct GenerableToolTests {
         print("✅ @Generable handled partial content correctly")
     }
     
-    @Test("Real Ollama API call with @Generable tool")
+    @Test("Real Ollama API call with @Generable tool", .timeLimit(.minutes(2)))
     func testRealOllamaCallWithGenerableTool() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         let tool = WeatherToolWithGenerable()
         
@@ -336,13 +315,5 @@ struct GenerableToolTests {
                 print(manString)
             }
         }
-    }
-}
-
-// MARK: - Test Skip Helper
-extension GenerableToolTests {
-    struct TestSkip: Error, CustomStringConvertible {
-        let reason: String
-        var description: String { reason }
     }
 }

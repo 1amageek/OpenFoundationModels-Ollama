@@ -220,46 +220,29 @@ struct OllamaLanguageModelTests {
 
 @Suite("Ollama Integration Tests", .serialized)
 struct OllamaIntegrationTests {
-    
-    private let defaultModel = "gpt-oss:20b"
-    
-    private var isOllamaAvailable: Bool {
-        get async {
-            do {
-                let config = OllamaConfiguration()
-                let httpClient = OllamaHTTPClient(configuration: config)
-                let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-                return true
-            } catch {
-                return false
-            }
-        }
-    }
-    
-    @Test("Check model availability")
+
+    @Test("Check model availability", .timeLimit(.minutes(1)))
     func testModelAvailability() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        // This might fail if the model isn't pulled
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
+
+        // This should succeed since checkPreconditions passed
         let isAvailable = try? await model.checkModelAvailability()
         #expect(isAvailable != nil)
     }
-    
-    @Test("List available models")
+
+    @Test("List available models", .timeLimit(.minutes(1)))
     func testListModels() async throws {
-        guard await isOllamaAvailable else {
+        guard await OllamaTestCoordinator.shared.isOllamaRunning() else {
             throw TestSkip(reason: "Ollama is not running")
         }
-        
+
         let config = OllamaConfiguration()
         let httpClient = OllamaHTTPClient(configuration: config)
         let response: ModelsResponse? = try? await httpClient.send(EmptyRequest(), to: "/api/tags")
         let modelNames = response?.models.map { $0.name } ?? []
-        
+
         #expect(modelNames.count >= 0)  // At least no error thrown
     }
 }

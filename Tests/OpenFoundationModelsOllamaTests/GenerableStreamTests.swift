@@ -389,38 +389,17 @@ struct GenerableStreamTests {
 @Suite("Generable Stream Integration Tests", .serialized)
 struct GenerableStreamIntegrationTests {
 
-    private let defaultModel = "gpt-oss:20b"
-
-    private var isOllamaAvailable: Bool {
-        get async {
-            do {
-                let config = OllamaConfiguration()
-                let httpClient = OllamaHTTPClient(configuration: config)
-                let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-                return true
-            } catch {
-                return false
-            }
-        }
-    }
-
     @Generable
     struct SimpleResponse: Sendable, Codable {
         @Guide(description: "A greeting message")
         let greeting: String
     }
 
-    @Test("Generate with retry succeeds")
+    @Test("Generate with retry succeeds", .timeLimit(.minutes(2)))
     func testGenerateWithRetrySucceeds() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
 
-        let model = OllamaLanguageModel(modelName: defaultModel)
-
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        let model = OllamaTestCoordinator.shared.createModel()
 
         let transcript = Transcript(entries: [
             .instructions(Transcript.Instructions(
@@ -450,17 +429,11 @@ struct GenerableStreamIntegrationTests {
         }
     }
 
-    @Test("Stream with retry yields results")
+    @Test("Stream with retry yields results", .timeLimit(.minutes(2)))
     func testStreamWithRetryYieldsResults() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
 
-        let model = OllamaLanguageModel(modelName: defaultModel)
-
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        let model = OllamaTestCoordinator.shared.createModel()
 
         let transcript = Transcript(entries: [
             .instructions(Transcript.Instructions(
@@ -504,9 +477,5 @@ struct GenerableStreamIntegrationTests {
         }
 
         #expect(receivedResults.count > 0)
-    }
-
-    struct TestSkip: Error {
-        let reason: String
     }
 }

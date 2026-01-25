@@ -6,25 +6,7 @@ import Foundation
 
 @Suite("Transcript-based Ollama Tests", .serialized)
 struct TranscriptTests {
-    
-    // MARK: - Test Configuration
-    
-    private let defaultModel = "gpt-oss:20b"
-    private let testTimeout: TimeInterval = 30.0
-    
-    private var isOllamaAvailable: Bool {
-        get async {
-            do {
-                let config = OllamaConfiguration()
-                let httpClient = OllamaHTTPClient(configuration: config)
-                let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-                return true
-            } catch {
-                return false
-            }
-        }
-    }
-    
+
     // MARK: - TranscriptConverter Tests
     
     @Test("Convert simple transcript to messages")
@@ -130,18 +112,12 @@ struct TranscriptTests {
     }
     
     // MARK: - Integration Tests (requires Ollama running)
-    
-    @Test("Generate with transcript")
+
+    @Test("Generate with transcript", .timeLimit(.minutes(1)))
     func testGenerateWithTranscript() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create a transcript
         let transcript = Transcript(entries: [
@@ -175,17 +151,11 @@ struct TranscriptTests {
         }
     }
     
-    @Test("Stream with transcript")
+    @Test("Stream with transcript", .timeLimit(.minutes(1)))
     func testStreamWithTranscript() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create a transcript
         let transcript = Transcript(entries: [
@@ -223,17 +193,11 @@ struct TranscriptTests {
         #expect(!textContent.isEmpty)
     }
     
-    @Test("Generate with tools in transcript")
+    @Test("Generate with tools in transcript", .timeLimit(.minutes(1)))
     func testGenerateWithToolsInTranscript() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: "gpt-oss:20b") // Use a model that supports tools
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create transcript with tools
         let mockSchema = GenerationSchema(
@@ -345,5 +309,3 @@ struct TranscriptTests {
         #expect(tools == nil)
     }
 }
-
-// TestSkip is already defined in OllamaToolTests.swift

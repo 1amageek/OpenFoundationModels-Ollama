@@ -5,33 +5,12 @@ import Foundation
 
 @Suite("Transcript Tool Integration Tests", .serialized)
 struct TranscriptToolTests {
-    
-    private let defaultModel = "gpt-oss:20b"
-    
-    private var isOllamaAvailable: Bool {
-        get async {
-            do {
-                let config = OllamaConfiguration()
-                let httpClient = OllamaHTTPClient(configuration: config)
-                let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-                return true
-            } catch {
-                return false
-            }
-        }
-    }
-    
-    @Test("Transcript with ToolDefinition - Weather Tool")
+
+    @Test("Transcript with ToolDefinition - Weather Tool", .timeLimit(.minutes(1)))
     func testTranscriptWithWeatherTool() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create weather tool using ToolSchemaHelper
         let weatherTool = try ToolSchemaHelper.createWeatherTool()
@@ -87,17 +66,11 @@ struct TranscriptToolTests {
         #expect(hasValidResponse)
     }
     
-    @Test("Transcript with Multiple Tools")
+    @Test("Transcript with Multiple Tools", .timeLimit(.minutes(1)))
     func testTranscriptWithMultipleTools() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create multiple tools
         let weatherTool = try ToolSchemaHelper.createWeatherTool()
@@ -152,17 +125,11 @@ struct TranscriptToolTests {
         #expect(foundResponse)
     }
     
-    @Test("Complete Tool Execution Flow with Transcript")
+    @Test("Complete Tool Execution Flow with Transcript", .timeLimit(.minutes(2)))
     func testCompleteToolFlow() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create a simple tool
         let tool = ToolSchemaHelper.createSimpleTool(
@@ -315,17 +282,11 @@ struct TranscriptToolTests {
         }
     }
     
-    @Test("Streaming with Tools in Transcript")
+    @Test("Streaming with Tools in Transcript", .timeLimit(.minutes(1)))
     func testStreamingWithTools() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create tool
         let tool = try ToolSchemaHelper.createCalculatorTool()

@@ -4,33 +4,9 @@ import Foundation
 @testable import OpenFoundationModels
 import OpenFoundationModelsCore
 
-// TestSkip is defined in OllamaLanguageModelTests.swift
-
 @Suite("Ollama Tool Calling Tests", .serialized)
 struct OllamaToolTests {
-    
-    // MARK: - Test Configuration
-    
-    private let defaultModel = "gpt-oss:20b"
-    private let testTimeout: TimeInterval = 30.0
-    
-    private var isOllamaAvailable: Bool {
-        get async {
-            do {
-                let config = OllamaConfiguration()
-                let httpClient = OllamaHTTPClient(configuration: config)
-                let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-                return true
-            } catch let error as OllamaHTTPError {
-                print("Ollama connection check failed: \(error.localizedDescription)")
-                return false
-            } catch {
-                print("Unexpected error checking Ollama: \(error)")
-                return false
-            }
-        }
-    }
-    
+
     // MARK: - OllamaTool for Tags
     
     @Generable
@@ -350,23 +326,23 @@ struct OllamaToolTests {
         ]
         
         let request = ChatRequest(
-            model: defaultModel,
+            model: TestConfiguration.defaultModel,
             messages: messages,
             stream: false,
             tools: [tool]
         )
-        
-        #expect(request.model == defaultModel)
+
+        #expect(request.model == TestConfiguration.defaultModel)
         #expect(request.messages.count == 1)
         #expect(request.tools?.count == 1)
         #expect(request.tools?.first?.function.name == "search")
-        
+
         // Test encoding
         let encoder = JSONEncoder()
         let data = try encoder.encode(request)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        
-        #expect(json?["model"] as? String == defaultModel)
+
+        #expect(json?["model"] as? String == TestConfiguration.defaultModel)
         #expect(json?["stream"] as? Bool == false)
         
         let tools = json?["tools"] as? [[String: Any]]
@@ -374,12 +350,12 @@ struct OllamaToolTests {
     }
     
     // MARK: - Integration Tests (requires Ollama running)
-    
-    @Test("Basic generate test")
+
+    @Test("Basic generate test", .timeLimit(.minutes(1)))
     func testBasicGenerate() async throws {
-        try await TestUtilities.checkPreconditions(modelName: defaultModel)
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         let transcript = Transcript(entries: [
             .prompt(Transcript.Prompt(
                 segments: [.text(Transcript.TextSegment(content: "Say hello"))]
@@ -399,11 +375,11 @@ struct OllamaToolTests {
         }
     }
     
-    @Test("Basic stream test")
+    @Test("Basic stream test", .timeLimit(.minutes(1)))
     func testBasicStream() async throws {
-        try await TestUtilities.checkPreconditions(modelName: defaultModel)
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         let transcript = Transcript(entries: [
             .prompt(Transcript.Prompt(
                 segments: [.text(Transcript.TextSegment(content: "Say hello"))]
@@ -443,17 +419,11 @@ struct OllamaToolTests {
     
     // MARK: - OllamaTool Session Tests
     
-    @Test("Natural language request for Ollama models")
+    @Test("Natural language request for Ollama models", .timeLimit(.minutes(2)))
     func testNaturalLanguageModelList() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         let tool = OllamaTagsTool()
         
@@ -490,17 +460,11 @@ struct OllamaToolTests {
         #expect(!response.content.isEmpty)
     }
     
-    @Test("Request models with details")
+    @Test("Request models with details", .timeLimit(.minutes(2)))
     func testModelsWithDetails() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         let tool = OllamaTagsTool()
         
@@ -542,17 +506,11 @@ struct OllamaToolTests {
         #expect(!response.content.isEmpty)
     }
     
-    @Test("Verify tool call in transcript")
+    @Test("Verify tool call in transcript", .timeLimit(.minutes(2)))
     func testToolCallInTranscript() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         let tool = OllamaTagsTool()
         
@@ -616,17 +574,11 @@ struct OllamaToolTests {
         }
     }
     
-    @Test("Filter models by name")
+    @Test("Filter models by name", .timeLimit(.minutes(2)))
     func testFilterModelsByName() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         let tool = OllamaTagsTool()
         

@@ -6,22 +6,7 @@ import OpenFoundationModelsCore
 
 @Suite("Response Format Tests", .serialized)
 struct ResponseFormatTests {
-    
-    private let defaultModel = "gpt-oss:20b"
-    
-    private var isOllamaAvailable: Bool {
-        get async {
-            do {
-                let config = OllamaConfiguration()
-                let httpClient = OllamaHTTPClient(configuration: config)
-                let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-                return true
-            } catch {
-                return false
-            }
-        }
-    }
-    
+
     // MARK: - Test Types with @Generable
     
     @Generable
@@ -282,17 +267,11 @@ struct ResponseFormatTests {
         }
     }
     
-    @Test("Test gpt-oss Harmony Response Format with API")
+    @Test("Test gpt-oss Harmony Response Format with API", .timeLimit(.minutes(1)))
     func testGptOssHarmonyWithAPI() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create transcript with ResponseFormat for WeatherResponse
         let transcript = Transcript(entries: [
@@ -441,17 +420,11 @@ struct ResponseFormatTests {
         #expect(systemMessage?.content.contains("\"temperature\"") == true)
     }
     
-    @Test("Explicit schema generation with OllamaLanguageModel")
+    @Test("Explicit schema generation with OllamaLanguageModel", .timeLimit(.minutes(2)))
     func testExplicitSchemaGeneration() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
 
-        let model = OllamaLanguageModel(modelName: defaultModel)
-
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        let model = OllamaTestCoordinator.shared.createModel()
 
         // Note: This test verifies that the schema is correctly sent to the model
         // and that structured output generation works
@@ -509,17 +482,11 @@ struct ResponseFormatTests {
         }
     }
     
-    @Test("Real Ollama API call with ResponseFormat")
+    @Test("Real Ollama API call with ResponseFormat", .timeLimit(.minutes(1)))
     func testRealOllamaWithResponseFormat() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
 
-        let model = OllamaLanguageModel(modelName: defaultModel)
-
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        let model = OllamaTestCoordinator.shared.createModel()
 
         // Create session
         let session = LanguageModelSession(
@@ -566,17 +533,11 @@ struct ResponseFormatTests {
         }
     }
     
-    @Test("Complex nested structure with ResponseFormat")
+    @Test("Complex nested structure with ResponseFormat", .timeLimit(.minutes(1)))
     func testComplexNestedStructure() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Use the TodoList type which has nested TodoItem
         // Create transcript with complex schema
@@ -646,28 +607,14 @@ struct ResponseFormatTests {
     }
 }
 
-// MARK: - Test Skip Helper
-extension ResponseFormatTests {
-    struct TestSkip: Error, CustomStringConvertible {
-        let reason: String
-        var description: String { reason }
-    }
-}
-
 // MARK: - Stream with ResponseFormat Tests
 
 extension ResponseFormatTests {
-    @Test("Stream with JSON Format")
+    @Test("Stream with JSON Format", .timeLimit(.minutes(1)))
     func testStreamWithJSONFormat() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create transcript with JSON response format
         let transcript = Transcript(entries: [
@@ -724,17 +671,11 @@ extension ResponseFormatTests {
         }
     }
     
-    @Test("Stream with JSON Schema")
+    @Test("Stream with JSON Schema", .timeLimit(.minutes(1)))
     func testStreamWithJSONSchema() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create transcript with structured response format
         let transcript = Transcript(entries: [
@@ -811,17 +752,11 @@ extension ResponseFormatTests {
         }
     }
     
-    @Test("Stream with Complex Nested Structure")
+    @Test("Stream with Complex Nested Structure", .timeLimit(.minutes(1)))
     func testStreamComplexNestedStructure() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create transcript with complex TodoList structure
         let transcript = Transcript(entries: [
@@ -897,17 +832,11 @@ extension ResponseFormatTests {
         #expect(!partialContent.isEmpty, "Should have received content")
     }
     
-    @Test("Stream with Invalid JSON Handling")
+    @Test("Stream with Invalid JSON Handling", .timeLimit(.minutes(1)))
     func testStreamWithInvalidJSONHandling() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running")
-        }
-        
-        let model = OllamaLanguageModel(modelName: defaultModel)
-        
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(defaultModel) not available")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
         
         // Create transcript that might produce partial or invalid JSON during streaming
         let transcript = Transcript(entries: [

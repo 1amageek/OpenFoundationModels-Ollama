@@ -10,27 +10,7 @@ struct OllamaSessionGenerableTests {
     // MARK: - Env & Defaults
 
     private let env = ProcessInfo.processInfo.environment
-    private var baseURL: URL {
-        let urlString = env["OLLAMA_BASE_URL"] ?? "http://127.0.0.1:11434"
-        return URL(string: urlString) ?? URL(string: "http://127.0.0.1:11434")!
-    }
-    private var modelName: String { env["OLLAMA_MODEL"] ?? "gpt-oss:20b" }
     private var minSuccess: Int { Int(env["OLLAMA_MIN_SUCCESS"] ?? "3") ?? 3 }
-
-    // MARK: - Availability Check
-
-    private var isOllamaAvailable: Bool {
-        get async {
-            do {
-                let config = OllamaConfiguration(baseURL: baseURL)
-                let httpClient = OllamaHTTPClient(configuration: config)
-                let _: ModelsResponse = try await httpClient.send(EmptyRequest(), to: "/api/tags")
-                return true
-            } catch {
-                return false
-            }
-        }
-    }
 
     // MARK: - Generable Target Type
 
@@ -79,17 +59,11 @@ struct OllamaSessionGenerableTests {
 
     // MARK: - Tests
 
-    @Test("Session.respond(generating:) with Ollama x20")
+    @Test("Session.respond(generating:) with Ollama x20", .timeLimit(.minutes(5)))
     func testGenerableRespondFiveTrials() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running at \(baseURL)")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
 
-        // Create model and ensure tag exists
-        let model = OllamaLanguageModel(configuration: OllamaConfiguration(baseURL: baseURL), modelName: modelName)
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(modelName) not available on server")
-        }
+        let model = OllamaTestCoordinator.shared.createModel()
 
         var successes = 0
         var failures = 0
@@ -124,15 +98,11 @@ struct OllamaSessionGenerableTests {
     }
 
     // Optional: Direct provider call to measure structured decoding without Session
-    @Test("Direct generate(transcript:) JSON → Product conversion (x20)")
+    @Test("Direct generate(transcript:) JSON → Product conversion (x20)", .timeLimit(.minutes(5)))
     func testDirectGenerateFiveTrials() async throws {
-        guard await isOllamaAvailable else {
-            throw TestSkip(reason: "Ollama is not running at \(baseURL)")
-        }
-        let model = OllamaLanguageModel(configuration: OllamaConfiguration(baseURL: baseURL), modelName: modelName)
-        guard try await model.checkModelAvailability() else {
-            throw TestSkip(reason: "Model \(modelName) not available on server")
-        }
+        try await OllamaTestCoordinator.shared.checkPreconditions()
+
+        let model = OllamaTestCoordinator.shared.createModel()
 
         var successes = 0
         var failures = 0

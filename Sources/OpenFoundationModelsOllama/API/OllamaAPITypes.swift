@@ -228,15 +228,66 @@ struct Message: Codable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
+        // Role
         if let roleString = try? container.decode(String.self, forKey: .role), !roleString.isEmpty {
             self.role = Role(rawValue: roleString) ?? .assistant
         } else {
             self.role = .assistant
         }
 
-        self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
-        self.toolCalls = try container.decodeIfPresent([ToolCall].self, forKey: .toolCalls)
-        self.thinking = try container.decodeIfPresent(String.self, forKey: .thinking)
+        // Raw content, thinking, and native tool calls
+        let rawContent = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        let rawThinking = try container.decodeIfPresent(String.self, forKey: .thinking)
+        let nativeToolCalls = try container.decodeIfPresent([ToolCall].self, forKey: .toolCalls) ?? []
+
+        #if DEBUG
+        print("[Message.init] rawContent: '\(rawContent.prefix(100))...'")
+        print("[Message.init] rawThinking: '\(rawThinking?.prefix(100) ?? "nil")...'")
+        print("[Message.init] nativeToolCalls count: \(nativeToolCalls.count)")
+        #endif
+
+        // Priority order for tool calls:
+        // 1. Native tool_calls (always use if present)
+        // 2. Text-based tool calls in content
+        // 3. Text-based tool calls in thinking (fallback for GLM models)
+
+        if !nativeToolCalls.isEmpty {
+            // Use native tool_calls
+            self.content = rawContent
+            self.toolCalls = nativeToolCalls
+            self.thinking = rawThinking
+            #if DEBUG
+            print("[Message.init] Using native tool_calls")
+            #endif
+        } else if TextToolCallParser.containsToolCallPatterns(rawContent) {
+            // Extract from content
+            let parseResult = TextToolCallParser.parse(rawContent)
+            self.content = parseResult.remainingContent
+            self.toolCalls = parseResult.toolCalls.isEmpty ? nil : parseResult.toolCalls
+            self.thinking = rawThinking
+            #if DEBUG
+            print("[Message.init] Extracted \(parseResult.toolCalls.count) tool calls from content")
+            #endif
+        } else if let thinking = rawThinking, TextToolCallParser.containsToolCallPatterns(thinking) {
+            // Extract from thinking (GLM fallback)
+            let parseResult = TextToolCallParser.parse(thinking)
+            self.content = rawContent
+            self.toolCalls = parseResult.toolCalls.isEmpty ? nil : parseResult.toolCalls
+            // Keep the remaining thinking content (without tool call tags)
+            self.thinking = parseResult.remainingContent.isEmpty ? nil : parseResult.remainingContent
+            #if DEBUG
+            print("[Message.init] Extracted \(parseResult.toolCalls.count) tool calls from thinking")
+            #endif
+        } else {
+            // No tool calls found anywhere
+            self.content = rawContent
+            self.toolCalls = nil
+            self.thinking = rawThinking
+            #if DEBUG
+            print("[Message.init] No tool calls found")
+            #endif
+        }
+
         self.toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
     }
 }
