@@ -5,14 +5,14 @@ import Foundation
 // MARK: - Test Configuration
 
 public struct TestConfiguration {
-    // Default test model
-    public static let defaultModel = "gpt-oss:20b"
-    
+    // Default test model (lightweight, fast)
+    public static let defaultModel = "lfm2.5-thinking:latest"
+
     // Alternative models for testing
     public static let alternativeModels = [
+        "gpt-oss:20b",
         "gpt-oss:120b",
-        "gemma3n:latest",
-        "lfm2.5-thinking:latest"
+        "gemma3n:latest"
     ]
 
     // Models with thinking capability

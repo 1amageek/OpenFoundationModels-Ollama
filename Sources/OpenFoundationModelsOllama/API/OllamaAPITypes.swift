@@ -228,48 +228,18 @@ struct Message: Codable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        // Role
+        // Role (default: assistant)
         if let roleString = try? container.decode(String.self, forKey: .role), !roleString.isEmpty {
             self.role = Role(rawValue: roleString) ?? .assistant
         } else {
             self.role = .assistant
         }
 
-        // Raw content, thinking, and native tool calls
-        let rawContent = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
-        let rawThinking = try container.decodeIfPresent(String.self, forKey: .thinking)
-        let nativeToolCalls = try container.decodeIfPresent([ToolCall].self, forKey: .toolCalls) ?? []
-
-        // Priority order for tool calls:
-        // 1. Native tool_calls (always use if present)
-        // 2. Text-based tool calls in content
-        // 3. Text-based tool calls in thinking (fallback for GLM models)
-
-        if !nativeToolCalls.isEmpty {
-            // Use native tool_calls
-            self.content = rawContent
-            self.toolCalls = nativeToolCalls
-            self.thinking = rawThinking
-        } else if TextToolCallParser.containsToolCallPatterns(rawContent) {
-            // Extract from content
-            let parseResult = TextToolCallParser.parse(rawContent)
-            self.content = parseResult.remainingContent
-            self.toolCalls = parseResult.toolCalls.isEmpty ? nil : parseResult.toolCalls
-            self.thinking = rawThinking
-        } else if let thinking = rawThinking, TextToolCallParser.containsToolCallPatterns(thinking) {
-            // Extract from thinking (GLM fallback)
-            let parseResult = TextToolCallParser.parse(thinking)
-            self.content = rawContent
-            self.toolCalls = parseResult.toolCalls.isEmpty ? nil : parseResult.toolCalls
-            // Keep the remaining thinking content (without tool call tags)
-            self.thinking = parseResult.remainingContent.isEmpty ? nil : parseResult.remainingContent
-        } else {
-            // No tool calls found anywhere
-            self.content = rawContent
-            self.toolCalls = nil
-            self.thinking = rawThinking
-        }
-
+        // Pure decoding - no normalization or parsing
+        // ResponseProcessor handles all normalization logic
+        self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        self.thinking = try container.decodeIfPresent(String.self, forKey: .thinking)
+        self.toolCalls = try container.decodeIfPresent([ToolCall].self, forKey: .toolCalls)
         self.toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
     }
 }

@@ -173,8 +173,23 @@ struct TranscriptTests {
         
         for try await entry in stream {
             receivedEntries.append(entry)
+            switch entry {
+            case .response(let response):
+                let segments = response.segments.map { seg -> String in
+                    switch seg {
+                    case .text(let t): return "text(\(t.content.prefix(50)))"
+                    default: return "other"
+                    }
+                }
+                print("[Stream] Response segments: \(segments)")
+            case .toolCalls(let toolCalls):
+                print("[Stream] ToolCalls: \(toolCalls.map { $0.toolName })")
+            default:
+                print("[Stream] Other entry: \(entry)")
+            }
         }
-        
+
+        print("[Stream] Total entries: \(receivedEntries.count)")
         #expect(receivedEntries.count > 0)
         
         // Extract text from response entries

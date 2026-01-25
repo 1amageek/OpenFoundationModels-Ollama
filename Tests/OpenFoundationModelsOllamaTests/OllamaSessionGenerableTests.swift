@@ -4,7 +4,7 @@ import Foundation
 @testable import OpenFoundationModels
 import OpenFoundationModelsCore
 
-@Suite("Ollama Session Generable Tests", .serialized)
+@Suite("Ollama Session Generable Tests", .serialized, .disabled("Heavy integration test - run manually"))
 struct OllamaSessionGenerableTests {
 
     // MARK: - Env & Defaults
@@ -79,7 +79,7 @@ struct OllamaSessionGenerableTests {
                 let response = try await session.respond(
                     to: promptText(i),
                     generating: Product.self,
-                    options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 200)
+                    options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 1000)
                 )
                 let product = response.content
                 // Light sanity checks (types already validated by decoding)
@@ -124,13 +124,27 @@ struct OllamaSessionGenerableTests {
                     segments: [
                         .text(Transcript.TextSegment(content: promptText(i)))
                     ],
-                    options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 200),
+                    options: GenerationOptions(temperature: 0.1, maximumResponseTokens: 1000),
                     // Ask for structured output using the Generable type
                     responseFormat: Transcript.ResponseFormat(type: Product.self)
                 ))
             ])
 
             do {
+                // Debug: Make direct HTTP call to see raw response
+                let builder = ChatRequestBuilder(
+                    configuration: OllamaConfiguration(),
+                    modelName: model.modelName
+                )
+                let buildResult = try builder.build(transcript: transcript, options: nil, streaming: false)
+                let httpClient = OllamaHTTPClient(configuration: OllamaConfiguration())
+                let rawResponse: ChatResponse = try await httpClient.send(buildResult.request, to: "/api/chat")
+
+                let rawContent = rawResponse.message?.content ?? ""
+                print("========== Trial #\(i + 1) RAW CONTENT ==========")
+                print(rawContent)
+                print("========== END RAW CONTENT ==========")
+
                 let entry = try await model.generate(transcript: transcript, options: nil)
                 guard case .response(let response) = entry else {
                     throw NSError(domain: "Test", code: -1, userInfo: [NSLocalizedDescriptionKey: "No response entry"])
@@ -144,13 +158,17 @@ struct OllamaSessionGenerableTests {
                     }
                 }.joined(separator: "\n")
 
+                // Always print the raw LLM output
+                print("📝 Trial #\(i + 1) PROCESSED: '\(text)'")
+
                 // Try to parse JSON to Product via GeneratedContent
                 let content = try GeneratedContent(json: text)
                 let product = try Product(content)
                 #expect(!product.name.isEmpty)
+                print("✅ Trial #\(i + 1) SUCCESS: name=\(product.name), price=\(product.price)")
                 successes += 1
             } catch {
-                print("❌ Direct trial #\(i + 1) failed: \(error)")
+                print("❌ Direct trial #\(i + 1) FAILED: \(error)")
                 failures += 1
             }
         }

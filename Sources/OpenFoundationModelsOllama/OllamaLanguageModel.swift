@@ -20,6 +20,9 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
     internal let modelName: String
     internal let configuration: OllamaConfiguration
 
+    /// Response processor for unified response handling
+    private let responseProcessor = ResponseProcessor()
+
     /// Request builder for creating ChatRequests from Transcripts
     private var requestBuilder: ChatRequestBuilder {
         ChatRequestBuilder(configuration: configuration, modelName: modelName)
@@ -59,11 +62,22 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
             streaming: false
         )
 
-        // Send request directly (Message self-normalizes during decoding)
+        // Send request
         let response: ChatResponse = try await httpClient.send(buildResult.request, to: "/api/chat")
 
-        // Convert ChatResponse to Transcript.Entry
-        return createEntry(from: response)
+        guard let message = response.message else {
+            return createResponseEntry(content: "")
+        }
+
+        // Use ResponseProcessor for unified handling
+        switch responseProcessor.process(message) {
+        case .toolCalls(let toolCalls):
+            return createToolCallsEntry(from: toolCalls)
+        case .content(let content):
+            return createResponseEntry(content: content)
+        case .empty:
+            return createResponseEntry(content: "")
+        }
     }
 
     public func stream(transcript: Transcript, options: GenerationOptions?) -> AsyncThrowingStream<Transcript.Entry, Error> {
@@ -77,12 +91,6 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
                         streaming: true
                     )
 
-                    let modelStrategy = buildResult.modelStrategy
-
-                    // Extract response format for fallback handling
-                    let responseFormat = TranscriptConverter.extractResponseFormatWithSchema(from: transcript)
-                        ?? TranscriptConverter.extractResponseFormat(from: transcript)
-
                     // Stream raw responses
                     let rawStream: AsyncThrowingStream<ChatResponse, Error> = await self.httpClient.stream(
                         buildResult.request,
@@ -90,13 +98,12 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
                     )
 
                     var hasYieldedContent = false
-                    var hasYieldedToolCalls = false
                     var accumulatedContent = ""
                     var accumulatedThinking = ""
                     var nativeToolCalls: [ToolCall] = []
 
                     for try await chunk in rawStream {
-                        // Accumulate content for text-based tool call extraction
+                        // Accumulate content
                         if let content = chunk.message?.content, !content.isEmpty {
                             accumulatedContent += content
 
@@ -120,53 +127,27 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
 
                         // On stream completion
                         if chunk.done {
-                            // Extract tool calls: prefer native, fallback to text-based
-                            let finalToolCalls: [ToolCall]
-                            let finalContent: String
+                            // Create a virtual Message from accumulated data
+                            let finalMessage = Message(
+                                role: .assistant,
+                                content: accumulatedContent,
+                                toolCalls: nativeToolCalls.isEmpty ? nil : nativeToolCalls,
+                                thinking: accumulatedThinking.isEmpty ? nil : accumulatedThinking
+                            )
 
-                            if !nativeToolCalls.isEmpty {
-                                finalToolCalls = nativeToolCalls
-                                finalContent = accumulatedContent
-                            } else if TextToolCallParser.containsToolCallPatterns(accumulatedContent) {
-                                let parseResult = TextToolCallParser.parse(accumulatedContent)
-                                finalToolCalls = parseResult.toolCalls
-                                finalContent = parseResult.remainingContent
-                            } else if TextToolCallParser.containsToolCallPatterns(accumulatedThinking) {
-                                // GLM models: tool calls in thinking field
-                                let parseResult = TextToolCallParser.parse(accumulatedThinking)
-                                finalToolCalls = parseResult.toolCalls
-                                finalContent = accumulatedContent
-                            } else {
-                                finalToolCalls = []
-                                finalContent = accumulatedContent
-                            }
+                            // Use ResponseProcessor for unified handling
+                            switch self.responseProcessor.process(finalMessage) {
+                            case .toolCalls(let toolCalls):
+                                continuation.yield(self.createToolCallsEntry(from: toolCalls))
 
-                            // Yield tool calls if present
-                            if !finalToolCalls.isEmpty && !hasYieldedToolCalls {
-                                let entry = self.createToolCallsEntry(from: finalToolCalls)
-                                continuation.yield(entry)
-                                hasYieldedToolCalls = true
-                            }
+                            case .content(let content):
+                                if !hasYieldedContent {
+                                    continuation.yield(self.createResponseEntry(content: content))
+                                }
 
-                            // Handle empty response case (gpt-oss fallback)
-                            if !hasYieldedContent && !hasYieldedToolCalls {
-                                if modelStrategy.usesHarmonyFormat && !accumulatedThinking.isEmpty && finalContent.isEmpty {
-                                    // For gpt-oss with ResponseFormat, generate default JSON
-                                    if let format = responseFormat {
-                                        let defaultJSON = self.requestBuilder.generateDefaultJSON(for: format)
-                                        let entry = self.createResponseEntry(content: defaultJSON)
-                                        continuation.yield(entry)
-                                    } else {
-                                        let entry = self.createResponseEntry(content: "")
-                                        continuation.yield(entry)
-                                    }
-                                } else if !finalContent.isEmpty {
-                                    // Final content that wasn't yielded yet
-                                    let entry = self.createResponseEntry(content: finalContent)
-                                    continuation.yield(entry)
-                                } else {
-                                    let entry = self.createResponseEntry(content: "")
-                                    continuation.yield(entry)
+                            case .empty:
+                                if !hasYieldedContent {
+                                    continuation.yield(self.createResponseEntry(content: ""))
                                 }
                             }
                         }
@@ -186,21 +167,6 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
     }
 
     // MARK: - Private Helper Methods
-
-    /// Create Transcript.Entry from ChatResponse
-    private func createEntry(from response: ChatResponse) -> Transcript.Entry {
-        guard let message = response.message else {
-            return createResponseEntry(content: "")
-        }
-
-        if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-            return createToolCallsEntry(from: toolCalls)
-        }
-
-        // Use content, fallback to thinking if content is empty
-        let content = message.content.isEmpty ? (message.thinking ?? "") : message.content
-        return createResponseEntry(content: content)
-    }
 
     /// Create tool calls entry from Ollama tool calls
     internal func createToolCallsEntry(from toolCalls: [ToolCall]) -> Transcript.Entry {
