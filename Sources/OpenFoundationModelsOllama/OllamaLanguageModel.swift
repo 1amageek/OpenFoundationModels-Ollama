@@ -118,13 +118,6 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
                             nativeToolCalls.append(contentsOf: toolCalls)
                         }
 
-                        // Debug: log thinking content for gpt-oss models
-                        #if DEBUG
-                        if modelStrategy.usesHarmonyFormat, let thinking = chunk.message?.thinking, !thinking.isEmpty {
-                            print("[thinking]: \(thinking)")
-                        }
-                        #endif
-
                         // On stream completion
                         if chunk.done {
                             // Extract tool calls: prefer native, fallback to text-based

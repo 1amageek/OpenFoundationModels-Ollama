@@ -62,27 +62,13 @@ internal struct TextToolCallParser: Sendable {
             guard let innerRange = Range(match.range(at: 1), in: content) else { continue }
             let innerContent = String(content[innerRange])
 
-            #if DEBUG
-            print("[TextToolCallParser] Parsing inner content: '\(innerContent.prefix(100))...'")
-            #endif
-
             // Try JSON format first
             if let toolCall = parseToolCallJSON(innerContent) {
-                #if DEBUG
-                print("[TextToolCallParser] Parsed as JSON: \(toolCall.function.name)")
-                #endif
                 toolCalls.append(toolCall)
             }
             // Try GLM-style XML format: ToolName<arg_key>key</arg_key><arg_value>value</arg_value>
             else if let toolCall = parseGLMStyleToolCall(innerContent) {
-                #if DEBUG
-                print("[TextToolCallParser] Parsed as GLM-style: \(toolCall.function.name)")
-                #endif
                 toolCalls.append(toolCall)
-            } else {
-                #if DEBUG
-                print("[TextToolCallParser] Failed to parse: '\(innerContent.prefix(100))...'")
-                #endif
             }
         }
 
@@ -121,10 +107,6 @@ internal struct TextToolCallParser: Sendable {
             return nil
         }
 
-        #if DEBUG
-        print("[TextToolCallParser] GLM-style tool name: '\(toolName)'")
-        #endif
-
         // Extract all key-value pairs
         var arguments: [String: Any] = [:]
 
@@ -146,11 +128,6 @@ internal struct TextToolCallParser: Sendable {
 
             let key = String(trimmed[keyRange]).trimmingCharacters(in: .whitespacesAndNewlines)
             let value = String(trimmed[valueRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-
-            #if DEBUG
-            print("[TextToolCallParser] GLM-style arg: '\(key)' = '\(value)'")
-            #endif
-
             arguments[key] = value
         }
 

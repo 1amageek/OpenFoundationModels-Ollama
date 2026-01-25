@@ -61,49 +61,25 @@ public actor OllamaHTTPClient {
             
             if !(request is EmptyRequest) {
                 urlRequest.httpBody = try encoder.encode(request)
-                #if DEBUG
-                // Debug: print the request body to verify think parameter is included
-                if endpoint == "/api/chat",
-                   let jsonData = urlRequest.httpBody,
-                   let jsonString = String(data: jsonData, encoding: .utf8) {
-                    // Only print first 500 chars to avoid log spam
-                    let preview = jsonString.prefix(500)
-                    print("[OllamaHTTPClient] Request body preview: \(preview)...")
-                }
-                #endif
             }
         }
 
         do {
             let (data, response) = try await session.data(for: urlRequest)
-            
+
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw OllamaHTTPError.invalidResponse
             }
-            
+
             if httpResponse.statusCode >= 400 {
                 do {
                     let errorResponse = try decoder.decode(ErrorResponse.self, from: data)
                     throw errorResponse
                 } catch is DecodingError {
-                    #if DEBUG
-                    if let responseText = String(data: data, encoding: .utf8) {
-                        print("[OllamaHTTPClient] Failed to decode error response: \(responseText)")
-                    }
-                    #endif
                     throw OllamaHTTPError.statusError(httpResponse.statusCode, data)
                 }
             }
-            
 
-            #if DEBUG
-            // Debug: print response to see if thinking is separated
-            if endpoint == "/api/chat",
-               let jsonString = String(data: data, encoding: .utf8) {
-                let preview = jsonString.prefix(500)
-                print("[OllamaHTTPClient] Response preview: \(preview)...")
-            }
-            #endif
             return try decoder.decode(Response.self, from: data)
         } catch let error as URLError {
             if error.code == .notConnectedToInternet || error.code == .cannotConnectToHost {
@@ -153,11 +129,6 @@ public actor OllamaHTTPClient {
                             let errorResponse = try decoder.decode(ErrorResponse.self, from: errorData)
                             continuation.finish(throwing: errorResponse)
                         } catch is DecodingError {
-                            #if DEBUG
-                            if let responseText = String(data: errorData, encoding: .utf8) {
-                                print("[OllamaHTTPClient] Failed to decode streaming error response: \(responseText)")
-                            }
-                            #endif
                             continuation.finish(throwing: OllamaHTTPError.statusError(httpResponse.statusCode, errorData))
                         }
                         return
