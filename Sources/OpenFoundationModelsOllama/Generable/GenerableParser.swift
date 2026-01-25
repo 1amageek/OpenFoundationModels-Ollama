@@ -3,8 +3,27 @@ import OpenFoundationModels
 import OpenFoundationModelsCore
 
 /// Parser for Generable types with auto-correction capabilities
+///
+/// ## 処理フロー
+/// 1. JSONExtractorで混合コンテンツからJSON抽出
+/// 2. 自動修正（trailing comma等）
+/// 3. GeneratedContent経由でデコード（@Generable対応）
+///
+/// ## 使用例
+/// ```swift
+/// let parser = GenerableParser<MyResponse>()
+///
+/// // 混合コンテンツからのパース
+/// let content = "Here is the response:\n```json\n{\"key\": \"value\"}\n```"
+/// let result = parser.parse(content)
+///
+/// // 抽出のみ
+/// if let json = parser.extractAndCorrect(content) {
+///     print(json)  // {"key": "value"}
+/// }
+/// ```
 public struct GenerableParser<T: Generable & Sendable & Decodable>: Sendable {
-    /// Decoder used for parsing
+    /// Decoder used for fallback parsing
     private let decoder: JSONDecoder
 
     public init() {
@@ -14,7 +33,14 @@ public struct GenerableParser<T: Generable & Sendable & Decodable>: Sendable {
     // MARK: - Public Parsing Methods
 
     /// Attempt to parse content as Generable type
-    /// - Parameter content: Raw JSON string content
+    ///
+    /// 処理フロー:
+    /// 1. JSONExtractorでJSON抽出（コードブロック or 生JSON）
+    /// 2. 自動修正（trailing comma等）
+    /// 3. GeneratedContent経由でデコード（@Generable対応）
+    /// 4. フォールバック: 直接JSONDecoder（非@Generable型用）
+    ///
+    /// - Parameter content: Raw content (may include surrounding text, markdown blocks, etc.)
     /// - Returns: Parsed result with success or error details
     public func parse(_ content: String) -> ParseResult<T> {
         // Skip empty content
@@ -22,41 +48,71 @@ public struct GenerableParser<T: Generable & Sendable & Decodable>: Sendable {
             return .failure(.emptyContent)
         }
 
-        // First, try to fix common JSON issues
-        let correctedContent = autoCorrectJSON(content)
+        // Step 1: Extract JSON from mixed content
+        let jsonContent = JSONExtractor.extract(from: content) ?? content
 
-        // Validate JSON structure
+        // Step 2: Apply auto-corrections
+        let correctedContent = autoCorrectJSON(jsonContent)
+
+        // Step 3: Validate JSON structure
         guard let data = correctedContent.data(using: .utf8) else {
             return .failure(.encodingError)
         }
 
-        // First check if it's valid JSON
         do {
             _ = try JSONSerialization.jsonObject(with: data)
         } catch {
             return .failure(.invalidJSON(content, error.localizedDescription))
         }
 
-        // Try to decode as Generable type
+        // Step 4: Decode via GeneratedContent (@Generable support)
         do {
-            let value = try decoder.decode(T.self, from: data)
+            let generatedContent = try GeneratedContent(json: correctedContent)
+            let value = try T(generatedContent)
             return .success(value)
-        } catch let error as DecodingError {
-            return .failure(mapDecodingError(error, content: content))
         } catch {
-            return .failure(.decodingFailed(error.localizedDescription))
+            // Step 5: Fallback to direct decoding (for non-@Generable types)
+            return decodeDirectly(data: data, originalContent: content)
         }
+    }
+
+    /// Extract and correct JSON from content (without decoding)
+    ///
+    /// - Parameter content: Raw content that may contain JSON
+    /// - Returns: Extracted and corrected JSON string, or nil if no valid JSON found
+    public func extractAndCorrect(_ content: String) -> String? {
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        let jsonContent = JSONExtractor.extract(from: content) ?? content
+        let correctedContent = autoCorrectJSON(jsonContent)
+
+        guard JSONExtractor.isValidJSON(correctedContent) else {
+            return nil
+        }
+
+        return correctedContent
     }
 
     /// Attempt to parse partial content (best effort)
     /// - Parameter content: Partial JSON string
     /// - Returns: Partial value if parseable, nil otherwise
     public func parsePartial(_ content: String) -> T? {
+        // Try to extract JSON first
+        let jsonContent = JSONExtractor.extract(from: content) ?? content
+
         // Try to complete partial JSON and parse
-        let completedContent = attemptJSONCompletion(content)
+        let completedContent = attemptJSONCompletion(jsonContent)
 
         guard let data = completedContent.data(using: .utf8) else {
             return nil
+        }
+
+        // Try GeneratedContent first, then fallback to direct decoding
+        if let generatedContent = try? GeneratedContent(json: completedContent),
+           let value = try? T(generatedContent) {
+            return value
         }
 
         return try? decoder.decode(T.self, from: data)
@@ -68,7 +124,11 @@ public struct GenerableParser<T: Generable & Sendable & Decodable>: Sendable {
     public func validate(_ content: String) -> [ValidationError] {
         var errors: [ValidationError] = []
 
-        guard let data = content.data(using: .utf8),
+        // Extract JSON from mixed content first
+        let jsonContent = JSONExtractor.extract(from: content) ?? content
+        let correctedContent = autoCorrectJSON(jsonContent)
+
+        guard let data = correctedContent.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             errors.append(ValidationError(field: "root", message: "Invalid JSON structure"))
             return errors
@@ -85,21 +145,24 @@ public struct GenerableParser<T: Generable & Sendable & Decodable>: Sendable {
 
     // MARK: - Private Helper Methods
 
+    /// Fallback direct decoding (for non-@Generable types)
+    private func decodeDirectly(data: Data, originalContent: String) -> ParseResult<T> {
+        do {
+            let value = try decoder.decode(T.self, from: data)
+            return .success(value)
+        } catch let error as DecodingError {
+            return .failure(mapDecodingError(error, content: originalContent))
+        } catch {
+            return .failure(.decodingFailed(error.localizedDescription))
+        }
+    }
+
     /// Auto-correct common JSON issues
+    ///
+    /// Note: Markdown code block extraction is handled by JSONExtractor.
+    /// This method focuses on fixing malformed JSON syntax.
     private func autoCorrectJSON(_ content: String) -> String {
         var corrected = content.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Remove markdown code blocks if present
-        if corrected.hasPrefix("```json") {
-            corrected = String(corrected.dropFirst(7))
-        } else if corrected.hasPrefix("```") {
-            corrected = String(corrected.dropFirst(3))
-        }
-        if corrected.hasSuffix("```") {
-            corrected = String(corrected.dropLast(3))
-        }
-
-        corrected = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Fix trailing commas in objects and arrays
         corrected = removeTrailingCommas(corrected)

@@ -62,6 +62,15 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
             streaming: false
         )
 
+        #if DEBUG
+        // Log request details
+        if let tools = buildResult.request.tools {
+            print("[Ollama] Request tools: \(tools.map { $0.function.name })")
+        } else {
+            print("[Ollama] Request tools: none")
+        }
+        #endif
+
         // Send request
         let response: ChatResponse = try await httpClient.send(buildResult.request, to: "/api/chat")
 
@@ -69,13 +78,33 @@ public final class OllamaLanguageModel: LanguageModel, Sendable {
             return createResponseEntry(content: "")
         }
 
+        #if DEBUG
+        // Log response details
+        if let thinking = message.thinking, !thinking.isEmpty {
+            print("[Ollama] Thinking: \(thinking.prefix(500))...")
+        }
+        if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+            print("[Ollama] Native tool_calls: \(toolCalls.map { $0.function.name })")
+        }
+        print("[Ollama] Content: \(message.content.prefix(200))...")
+        #endif
+
         // Use ResponseProcessor for unified handling
         switch responseProcessor.process(message) {
         case .toolCalls(let toolCalls):
+            #if DEBUG
+            print("[Ollama] Processed as: toolCalls (\(toolCalls.count))")
+            #endif
             return createToolCallsEntry(from: toolCalls)
         case .content(let content):
+            #if DEBUG
+            print("[Ollama] Processed as: content")
+            #endif
             return createResponseEntry(content: content)
         case .empty:
+            #if DEBUG
+            print("[Ollama] Processed as: empty")
+            #endif
             return createResponseEntry(content: "")
         }
     }

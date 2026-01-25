@@ -62,6 +62,17 @@ struct ChatRequestBuilder: Sendable {
         // Convert Transcript to Ollama messages
         var messages = TranscriptConverter.buildMessages(from: transcript)
 
+        #if DEBUG
+        print("[ChatRequestBuilder] === BUILD START ===")
+        print("[ChatRequestBuilder] Initial messages count: \(messages.count)")
+        for (i, msg) in messages.enumerated() {
+            print("[ChatRequestBuilder] Message[\(i)] role=\(msg.role), content length=\(msg.content.count)")
+            if msg.role == .user {
+                print("[ChatRequestBuilder] USER PROMPT: \(msg.content.prefix(500))...")
+            }
+        }
+        #endif
+
         // Extract tools from transcript
         let tools = try TranscriptConverter.extractTools(from: transcript)
 
@@ -81,6 +92,15 @@ struct ChatRequestBuilder: Sendable {
             addStructuredOutputInstructions(to: &messages, format: responseFormat!)
             // Disable thinking to force output to content field
             thinkingMode = .disabled
+
+            #if DEBUG
+            print("[ChatRequestBuilder] Structured output mode enabled")
+            print("[ChatRequestBuilder] === FINAL SYSTEM MESSAGE ===")
+            if let sysMsg = messages.first(where: { $0.role == .system }) {
+                print(sysMsg.content)
+            }
+            print("[ChatRequestBuilder] === END SYSTEM MESSAGE ===")
+            #endif
         } else {
             // Let Ollama use model defaults
             thinkingMode = nil

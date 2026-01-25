@@ -162,6 +162,14 @@ public final class GenerableStreamSession<T: Generable & Sendable & Decodable>: 
                 }
 
                 // Stream complete - try to parse final content
+                #if DEBUG
+                print("[GenerableStreamSession] Accumulated content length: \(accumulatedContent.count)")
+                print("[GenerableStreamSession] Content preview: \(String(accumulatedContent.prefix(500)))")
+                if accumulatedContent.contains("<think>") {
+                    print("[GenerableStreamSession] WARNING: Content contains <think> tag!")
+                }
+                #endif
+
                 let parseResult = parser.parse(accumulatedContent)
 
                 switch parseResult {
@@ -173,6 +181,13 @@ public final class GenerableStreamSession<T: Generable & Sendable & Decodable>: 
                     return
 
                 case .failure(let parseError):
+                    #if DEBUG
+                    print("[GenerableStreamSession] Parse failed: \(parseError)")
+                    print("[GenerableStreamSession] Full content for debugging:")
+                    print("---START---")
+                    print(accumulatedContent)
+                    print("---END---")
+                    #endif
                     lastError = parseError.toGenerableError()
                 }
             } catch {
@@ -238,6 +253,14 @@ public final class GenerableStreamSession<T: Generable & Sendable & Decodable>: 
             throw GenerableError.emptyResponse
         }
 
+        #if DEBUG
+        print("[GenerableStreamSession.generate] Content length: \(content.count)")
+        print("[GenerableStreamSession.generate] Content preview: \(String(content.prefix(500)))")
+        if content.contains("<think>") {
+            print("[GenerableStreamSession.generate] WARNING: Content contains <think> tag!")
+        }
+        #endif
+
         // Parse content
         let parseResult = parser.parse(content)
 
@@ -245,6 +268,13 @@ public final class GenerableStreamSession<T: Generable & Sendable & Decodable>: 
         case .success(let value):
             return (value, content)
         case .failure(let parseError):
+            #if DEBUG
+            print("[GenerableStreamSession.generate] Parse failed: \(parseError)")
+            print("[GenerableStreamSession.generate] Full content:")
+            print("---START---")
+            print(content)
+            print("---END---")
+            #endif
             // Throw error with content for retry context
             throw GenerationErrorWithContent(
                 underlyingError: parseError.toGenerableError(),

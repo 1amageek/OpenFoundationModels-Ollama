@@ -40,18 +40,7 @@ struct ResponseProcessor: Sendable {
         options: [.caseInsensitive]
     )
 
-    /// Pattern to match markdown code blocks (```json ... ``` or ``` ... ```)
-    /// Captures the content inside the code block
-    private static let markdownCodeBlockPattern = try! NSRegularExpression(
-        pattern: #"```(?:json)?\s*\n?([\s\S]*?)```"#,
-        options: [.caseInsensitive]
-    )
-
-    /// Pattern to match JSON objects
-    private static let jsonObjectPattern = try! NSRegularExpression(
-        pattern: #"\{[\s\S]*\}"#,
-        options: []
-    )
+    // Note: Markdown code block and JSON object patterns are now in JSONExtractor
 
     // MARK: - Process
 
@@ -119,19 +108,38 @@ struct ResponseProcessor: Sendable {
     private func processContent(_ content: String) -> String {
         guard !content.isEmpty else { return "" }
 
+        #if DEBUG
+        print("[ResponseProcessor] Input content length: \(content.count)")
+        print("[ResponseProcessor] Input preview: \(String(content.prefix(300)))")
+        #endif
+
         // Step 1: Strip think-related tags
         let strippedContent = stripThinkTags(from: content)
 
+        #if DEBUG
+        print("[ResponseProcessor] After stripThinkTags length: \(strippedContent.count)")
+        print("[ResponseProcessor] Stripped preview: \(String(strippedContent.prefix(300)))")
+        #endif
+
         // Step 2: Extract JSON from the stripped content
         if let json = extractJSONFromContent(from: strippedContent) {
+            #if DEBUG
+            print("[ResponseProcessor] JSON extracted from stripped content: \(String(json.prefix(200)))")
+            #endif
             return json
         }
 
         // If no JSON found in stripped content, try original content
         if let json = extractJSONFromContent(from: content) {
+            #if DEBUG
+            print("[ResponseProcessor] JSON extracted from original content: \(String(json.prefix(200)))")
+            #endif
             return json
         }
 
+        #if DEBUG
+        print("[ResponseProcessor] No JSON found, returning stripped content")
+        #endif
         // Return stripped content as-is (for non-JSON responses)
         return strippedContent.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -168,59 +176,8 @@ struct ResponseProcessor: Sendable {
 
     // MARK: - JSON Extraction
 
-    /// Extract JSON from content (tries code block first, then raw JSON)
+    /// Extract JSON from content using shared JSONExtractor
     private func extractJSONFromContent(from content: String) -> String? {
-        // Priority 1: Extract from markdown code block
-        if let json = extractJSONFromCodeBlock(from: content) {
-            return json
-        }
-
-        // Priority 2: Extract raw JSON object
-        if let json = extractJSON(from: content) {
-            return json
-        }
-
-        return nil
-    }
-
-    /// Extract JSON from markdown code block (```json ... ``` or ``` ... ```)
-    private func extractJSONFromCodeBlock(from content: String) -> String? {
-        let range = NSRange(content.startIndex..<content.endIndex, in: content)
-
-        guard let match = Self.markdownCodeBlockPattern.firstMatch(in: content, options: [], range: range),
-              match.numberOfRanges > 1,
-              let captureRange = Range(match.range(at: 1), in: content) else {
-            return nil
-        }
-
-        let extracted = String(content[captureRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Validate it's parseable JSON
-        guard let data = extracted.data(using: .utf8),
-              (try? JSONSerialization.jsonObject(with: data)) != nil else {
-            return nil
-        }
-
-        return extracted
-    }
-
-    /// Extract raw JSON object from content
-    private func extractJSON(from content: String) -> String? {
-        let range = NSRange(content.startIndex..<content.endIndex, in: content)
-
-        guard let match = Self.jsonObjectPattern.firstMatch(in: content, options: [], range: range),
-              let swiftRange = Range(match.range, in: content) else {
-            return nil
-        }
-
-        let jsonString = String(content[swiftRange])
-
-        // Validate it's actually parseable JSON
-        guard let data = jsonString.data(using: .utf8),
-              (try? JSONSerialization.jsonObject(with: data)) != nil else {
-            return nil
-        }
-
-        return jsonString
+        return JSONExtractor.extract(from: content)
     }
 }

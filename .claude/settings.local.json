@@ -33,5 +33,9 @@
       "Bash(tee:*)"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "chrome-devtools"
+  ],
+  "enableAllProjectMcpServers": true
 }
